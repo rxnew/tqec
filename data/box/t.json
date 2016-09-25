@@ -1,0 +1,101 @@
+{
+    "nested": false,
+    "elements": {
+        "bits"   : [0, 1, 2, 3, 4, 5],
+        "inputs" : [0],
+        "outputs": [5],
+        "initializations": [
+            {
+                "bit" : 1,
+                "type": "A"
+            },
+            {
+                "bit" : 2,
+                "type": {
+                    "basis": "Z",
+                    "value": 0
+                }
+            },
+            {
+                "bit" : 3,
+                "type": "Y"
+            },
+            {
+                "bit" : 4,
+                "type": {
+                    "basis": "X",
+                    "value": 0
+                }
+            },
+            {
+                "bit" : 5,
+                "type": {
+                    "basis": "Z",
+                    "value": 0
+                }
+            }
+        ],
+        "measurements": [
+            {
+                "bit"  : 0,
+                "basis": "Z"
+            },
+            {
+                "bit"   : 1,
+                "basis" : ["Z", "X"],
+                "depend": 0
+            },
+            {
+                "bit"   : 2,
+                "basis" : ["X", "Z"],
+                "depend": 0
+            },
+            {
+                "bit"   : 3,
+                "basis" : ["X", "Z"],
+                "depend": 0
+            },
+            {
+                "bit"   : 3,
+                "basis" : ["Z", "X"],
+                "depend": 0
+            }
+        ],
+        "operations": [
+            {
+                "type": "braiding",
+                "bits": [1, 0]
+            },
+            {
+                "type": "braiding",
+                "bits": [1, 2]
+            },
+            {
+                "type": "braiding",
+                "bits": [3, 1]
+            },
+            {
+                "type": "braiding",
+                "bits": [4, 3]
+            },
+            {
+                "type": "braiding",
+                "bits": [3, 5]
+            },
+            {
+                "type": "braiding",
+                "bits": [4, 5]
+            }
+        ],
+        "boxes": [
+            {
+                "type"  : "Y",
+                "number": 1
+            },
+            {
+                "type"  : "A",
+                "number": 1
+            }
+        ]
+    }
+}

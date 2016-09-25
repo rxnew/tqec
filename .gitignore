@@ -1,0 +1,7 @@
+*.[a|o]
+*~
+\#*\#
+*.bak
+gitflow/
+__pycache__
+!.gitkeep
