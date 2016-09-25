@@ -64,27 +64,45 @@
         "operations": [
             {
                 "type": "braiding",
-                "bits": [1, 0]
+                "bits": {
+                    "controls": [1],
+                    "targets" : [0]
+                }
             },
             {
                 "type": "braiding",
-                "bits": [1, 2]
+                "bits": {
+                    "controls": [1],
+                    "targets" : [2]
+                }
             },
             {
                 "type": "braiding",
-                "bits": [3, 1]
+                "bits": {
+                    "controls": [3],
+                    "targets" : [1]
+                }
             },
             {
                 "type": "braiding",
-                "bits": [4, 3]
+                "bits": {
+                    "controls": [4],
+                    "targets" : [3]
+                }
             },
             {
                 "type": "braiding",
-                "bits": [3, 5]
+                "bits": {
+                    "controls": [3],
+                    "targets" : [5]
+                }
             },
             {
                 "type": "braiding",
-                "bits": [4, 5]
+                "bits": {
+                    "controls": [4],
+                    "targets" : [5]
+                }
             }
         ],
         "boxes": [
