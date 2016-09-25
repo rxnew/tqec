@@ -1,18 +1,12 @@
+import json
+import os
 import re
 import subprocess
-
-class ModuleElements:
-    def __init__(self, elements):
-        self.bits            = elements['bits']
-        self.inputs          = elements['inputs']
-        self.outputs         = elements['outputs']
-        self.initializations = elements['initializations']
-        self.measurements    = elements['measurements']
-        self.operations      = elements['operations']
 
 class Module:
     counter = 0
     p_gate_type_x = re.compile('braiding|toffoli|mct', re.IGNORECASE)
+    dump_directory_name = './'
 
     @classmethod
     def get_identity(cls):
@@ -21,20 +15,12 @@ class Module:
         return identity
 
     def __init__(self, box, inners, permissible_error_rate, permissible_size):
-        self.identity        = Module.get_identity()
-        self.type_name       = box.type_name
-        self.size            = [0, 0]
-        self.error_rate      = 0.0
-
-        self.elements        = ModuleElements(box.elements)
-
-        #self.bits            = box.elements['bits']
-        #self.inputs          = box.elements['inputs']
-        #self.outputs         = box.elements['outputs']
-        #self.initializations = box.elements['initializations']
-        #self.measurements    = box.elements['measurements']
-        #self.operations      = box.elements['operations']
-        #self.raw_inners      = []
+        self.identity   = Module.get_identity()
+        self.type_name  = box.type_name
+        self.size       = [0, 0]
+        self.error_rate = 0.0
+        self.elements   = box.elements
+        self.raw_inners = []
 
         self.set_raw_inners(inners)
 
@@ -43,9 +29,11 @@ class Module:
 
     def set_raw_inners(self, inners):
         for inner in inners:
-            raw_inner = {'type' : inner.type_name,
-                         'size' : inner.size,
-                         'error': inner.error_rate}
+            raw_inner = {
+                'type' : inner.type_name,
+                'size' : inner.size,
+                'error': inner.error_rate
+            }
             self.raw_inners.append(raw_inner)
 
     def place_initializations(self):
@@ -130,3 +118,22 @@ class Module:
 
     def convert_no_to_bit(self, no):
         return self.elements.bits[no]
+
+    def dump(self, f=None):
+        if not f:
+            if not os.path.isdir(Module.dump_directory_name):
+                os.makedirs(Module.dump_directory_name)
+
+            file_name = Module.dump_directory_name + 'module_' + \
+                        str(self.identity).zfill(4) + '_' + self.type_name.lower() + '.json'
+            f = open(file_name, 'w')
+
+        dict_obj = {
+            'type'    : self.type_name,
+            'id'      : self.identity,
+            'size'    : self.size,
+            'error'   : self.error_rate,
+            'elements': self.elements.to_dict()
+        }
+
+        json.dump(dict_obj, f, indent=4)

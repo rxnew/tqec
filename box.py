@@ -1,3 +1,4 @@
+from elements import Elements
 from module import Module
 
 import json
@@ -27,39 +28,20 @@ class Box:
         raw = Box.get(type_name)
 
         self.type_name = type_name
-        self.elements = raw.get('elements', {})
         self.pure_error_rate = raw.get('error', 0.0)
         self.inners = []
 
-        self.check_formats()
-        self.collect_formats()
-        self.set_inners()
+        self.set_inners(raw.get('elements', {}).get('boxes', []))
 
-    def check_formats(self):
-        if not isinstance(self.elements, dict):
-            raise FormatError('Elements is not a dict object.')
+    def set_elements(self):
+        raw = Box.get(self.type_name)
 
-        if not isinstance(self.pure_error_rate, float) and \
-           not isinstance(self.pure_error_rate, int):
-            raise FormatError('A pure error rate is not a float or int object.')
+        self.elements = Elements(raw.get('elements', {}))
 
-    def collect_formats(self):
-        keys = ['bits',
-                'inputs',
-                'outputs',
-                'initializations',
-                'measurements',
-                'operations',
-                'boxes']
-
-        for key in keys:
-            if not key in self.elements:
-                self.elements[key] = []
-
-    def set_inners(self):
+    def set_inners(self, raw_inners):
         pure_success_rate = 1 - self.pure_error_rate
 
-        for raw_inner in self.elements.get('boxes', []):
+        for raw_inner in raw_inners:
             inner_type = raw_inner.get('type')
             inner_number = raw_inner.get('number', 1)
 
@@ -74,6 +56,8 @@ class Box:
         self.pure_error_rate = 1 - pure_success_rate
 
     def deploy(self, permissible_error_rate, permissible_size):
+        self.set_elements()
+
         inner_modules = []
 
         for (inner, number) in self.inners:
@@ -83,7 +67,10 @@ class Box:
                 inner_module = inner.deploy(inner_permissible_error_rate, inner_permissible_size)
                 inner_modules.append(inner_module)
 
+        self.inners.clear()
+
         module = Module(self, inner_modules, permissible_error_rate, permissible_size)
+        module.dump()
 
         return module
 
