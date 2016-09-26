@@ -4,7 +4,7 @@ from box import Box
 from module import Module
 
 def main():
-    Module.dump_directory_name = './modules/test/'
+    Module.dump_directory_path = './modules/test/'
 
     box = Box('T')
     box.deploy(0.4, (20, 49))

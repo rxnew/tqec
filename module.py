@@ -6,7 +6,7 @@ import subprocess
 class Module:
     counter = 0
     p_gate_type_x = re.compile('braiding|toffoli|mct', re.IGNORECASE)
-    dump_directory_name = './'
+    dump_directory_path = './'
 
     @classmethod
     def get_identity(cls):
@@ -122,10 +122,10 @@ class Module:
 
     def dump(self, f=None):
         if not f:
-            if not os.path.isdir(Module.dump_directory_name):
-                os.makedirs(Module.dump_directory_name)
+            if not os.path.isdir(Module.dump_directory_path):
+                os.makedirs(Module.dump_directory_path)
 
-            file_name = Module.dump_directory_name + 'module_' + \
+            file_name = Module.dump_directory_path + 'module_' + \
                         str(self.identity).zfill(4) + '_' + self.type_name.lower() + '.json'
             f = open(file_name, 'w')
 
