@@ -17,8 +17,6 @@ class Module:
     def __init__(self, box, inners, permissible_error_rate, permissible_size):
         self.identity   = Module.get_identity()
         self.type_name  = box.type_name
-        self.size       = [0, 0]
-        self.error_rate = 0.0
         self.elements   = box.elements
         self.raw_inners = []
 
@@ -26,6 +24,7 @@ class Module:
 
         self.place(permissible_error_rate, permissible_size)
         self.parallelize()
+        self.connect()
 
     def set_raw_inners(self, inners):
         for inner in inners:
@@ -37,6 +36,15 @@ class Module:
             }
             self.raw_inners.append(raw_inner)
 
+    def place(self, permissible_error_rate, permissible_size):
+        self.calculate_number_of_spares()
+        self.place_initializations()
+        self.place_measurements()
+        self.place_inners()
+
+        self.error_rate = 0.002
+        self.size = [10, 20]
+
     def place_initializations(self):
         for initialization in self.elements.initializations:
             initialization['column'] = 0
@@ -44,8 +52,11 @@ class Module:
     def place_measurements(self):
         pass
 
-    def place(self, permissible_error_rate, permissible_size):
-        a = 0
+    def place_inners(self):
+        pass
+
+    def calculate_number_of_spares(self):
+        pass
 
     def parallelize(self):
         qo = self.convert_to_qo()
