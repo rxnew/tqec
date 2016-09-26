@@ -5,5 +5,5 @@
 gitflow/
 __pycache__
 bin/*
-modules/*
+results/*
 !.gitkeep
