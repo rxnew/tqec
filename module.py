@@ -31,6 +31,7 @@ class Module:
         for inner in inners:
             raw_inner = {
                 'type' : inner.type_name,
+                'id'   : inner.identity,
                 'size' : inner.size,
                 'error': inner.error_rate
             }
@@ -128,12 +129,15 @@ class Module:
                         str(self.identity).zfill(4) + '_' + self.type_name.lower() + '.json'
             f = open(file_name, 'w')
 
+        elements = self.elements.to_dict()
+        elements['modules'] = self.raw_inners
+
         dict_obj = {
             'type'    : self.type_name,
             'id'      : self.identity,
             'size'    : self.size,
             'error'   : self.error_rate,
-            'elements': self.elements.to_dict()
+            'elements': elements
         }
 
         json.dump(dict_obj, f, indent=4)
