@@ -4,6 +4,7 @@
 *.bak
 gitflow/
 __pycache__
-bin/*
 results/*
+**/bin/*
+**/build/*
 !.gitkeep

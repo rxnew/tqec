@@ -9,35 +9,58 @@ class Module:
     dump_directory_path = './'
 
     @classmethod
-    def get_identity(cls):
+    def get_identity(cls, type_name):
         identity = cls.counter
         cls.counter += 1
         return identity
 
-    def __init__(self, box, inners, permissible_error_rate, permissible_size):
+    @classmethod
+    def get_file_name(cls, identity, type_name):
+        return cls.dump_directory_path + 'module_' + \
+            str(identity).zfill(4) + '_' + type_name.lower() + '.json'
+
+    @classmethod
+    def load_raw(cls, identity, type_name):
+        if not identity or not type_name:
+            return {}
+
+        file_name = cls.get_file_name(identity, type_name)
+
+        try:
+            f = open(file_name, 'r')
+        except IOError:
+            return {}
+
+        raw = json.load(f)
+        return raw
+
+    @classmethod
+    def load_raw_inner_format(cls, identity, type_name):
+        raw = cls.load_raw(identity, type_name)
+        raw_inner_format = cls.convert_raw_to_inner_format(raw)
+        return raw_inner_format
+
+    @classmethod
+    def convert_raw_to_inner_format(cls, raw):
+        return {
+            'type' : raw.get('type_name', ''),
+            'id'   : raw.get('id', ''),
+            'size' : raw.get('size', ''),
+            'error': raw.get('error', '')
+        }
+
+    def __init__(self, box, raw_inners, permissible_error_rate, permissible_size):
         self.identity   = Module.get_identity()
         self.type_name  = box.type_name
         self.elements   = box.elements
-        self.raw_inners = []
-
-        self.set_raw_inners(inners)
+        self.raw_inners = raw_inners
 
         self.place(permissible_error_rate, permissible_size)
         self.parallelize()
         self.connect()
 
-    def set_raw_inners(self, inners):
-        for inner in inners:
-            raw_inner = {
-                'type' : inner.type_name,
-                'id'   : inner.identity,
-                'size' : inner.size,
-                'error': inner.error_rate
-            }
-            self.raw_inners.append(raw_inner)
-
     def place(self, permissible_error_rate, permissible_size):
-        self.calculate_number_of_spares()
+        self.calculate_number_of_spares(permissible_error_rate)
         self.place_initializations()
         self.place_measurements()
         self.place_inners()
@@ -55,7 +78,8 @@ class Module:
     def place_inners(self):
         pass
 
-    def calculate_number_of_spares(self):
+    def calculate_number_of_spares(self, permissible_error_rate):
+        cmd = './bin/optimize'
         pass
 
     def parallelize(self):
@@ -131,19 +155,11 @@ class Module:
     def convert_no_to_bit(self, no):
         return self.elements.bits[no]
 
-    def dump(self, f=None):
-        if not f:
-            if not os.path.isdir(Module.dump_directory_path):
-                os.makedirs(Module.dump_directory_path)
-
-            file_name = Module.dump_directory_path + 'module_' + \
-                        str(self.identity).zfill(4) + '_' + self.type_name.lower() + '.json'
-            f = open(file_name, 'w')
-
+    def get_raw(self):
         elements = self.elements.to_dict()
         elements['modules'] = self.raw_inners
 
-        dict_obj = {
+        return {
             'type'    : self.type_name,
             'id'      : self.identity,
             'size'    : self.size,
@@ -151,4 +167,20 @@ class Module:
             'elements': elements
         }
 
-        json.dump(dict_obj, f, indent=4)
+    def get_raw_inner_format(self):
+        return {
+            'type' : self.type_name,
+            'id'   : self.identity,
+            'size' : self.size,
+            'error': self.error_rate
+        }
+
+    def dump(self, f=None):
+        if not f:
+            if not os.path.isdir(Module.dump_directory_path):
+                os.makedirs(Module.dump_directory_path)
+
+            file_name = Module.get_file_name(self.identity, self.type_name)
+            f = open(file_name, 'w')
+
+        json.dump(self.get_raw(), f, indent=4)
