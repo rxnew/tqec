@@ -1,7 +1,8 @@
 #pragma once
 
 #include "obstacles.hpp"
-#include "passage_counters.hpp"
+#include "weights.hpp"
+#include "best_first_search.hpp"
 
 #include <list>
 
@@ -18,9 +19,11 @@ class Connection {
  private:
   Endpoints endpoints_;
   Obstacles obstacles_;
-  PassageCounters counters_;
+  Weights weights_;
+  BestFirstSearch bfs_;
 
-  auto _updatePassageCounters(const Routes& routes) -> void;
+  auto _countCosts(const Routes& routes) -> int;
+  auto _updateWeights(const Routes& routes) -> void;
   auto _isNonOverlappedRoutes(const Routes& routes) const -> bool;
 
  public:
