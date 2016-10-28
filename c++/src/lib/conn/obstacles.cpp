@@ -24,7 +24,5 @@ auto Obstacles::addRectangular(const Node& pos, const Size& size) -> void {
 auto Obstacles::remove(const Node& node) -> void {
   this->obstacles_.erase(node);
 }
-
-Size::Size(int w, int h, int d) : w(w), h(h), d(d) {}
 }
 }

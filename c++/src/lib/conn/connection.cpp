@@ -40,16 +40,19 @@ auto Connection::_isNonOverlappedRoutes(const Routes& routes) const -> bool {
   return true;
 }
 
-Connection::Connection(const Endpoints& endpoints, const Obstacles& obstacles)
+Connection::Connection(const Endpoints& endpoints, const Obstacles& obstacles,
+                       const Area& area)
   : endpoints_(endpoints), obstacles_(obstacles), weights_(endpoints.size()),
-    bfs_(&this->obstacles_, &this->weights_) {
+    bfs_(&this->obstacles_, &this->weights_, area) {
   for(const auto& endpoint : this->endpoints_) {
     this->weights_.addRoute(endpoint.first);
   }
 }
 
 auto Connection::search() -> Routes {
+  Routes prev_routes;
   //auto bias = 0.0f;
+  auto unchanged_counts = 0;
   auto bias = 1.0f;
 
   while(true) {
@@ -66,6 +69,10 @@ auto Connection::search() -> Routes {
     this->_updateWeights(routes);
 
     if(this->_isNonOverlappedRoutes(routes)) return routes;
+    if(routes == prev_routes) {
+      if(++unchanged_counts > 10) return routes;
+    }
+    prev_routes = routes;
     std::cout << "Cost: " << this->_countCosts(routes) << std::endl;
   }
 

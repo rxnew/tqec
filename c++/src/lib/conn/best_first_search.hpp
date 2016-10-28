@@ -1,5 +1,6 @@
 #pragma once
 
+#include "area.hpp"
 #include "obstacles.hpp"
 #include "weights.hpp"
 
@@ -12,6 +13,7 @@ class BestFirstSearch {
  private:
   const Obstacles* const obstacles_ptr_;
   const Weights* const weights_ptr_;
+  const Area area_;
   const std::function<bool(const Node&, const Node&)> compare_node_;
 
   using NodeMap = std::unordered_map<Node, Node>;
@@ -25,12 +27,13 @@ class BestFirstSearch {
   auto _evaluateNode(const Node& node) const -> float;
   auto _compareNode(const Node& lhs, const Node& rhs) const -> bool;
   auto _isObstacleNode(const Node& node) const -> bool;
+  auto _isOutsideArea(const Node& node) const -> bool;
   auto _isDestinationNode(const Node& node) const -> bool;
   auto _createRoute(const NodeMap& visited_nodes) const -> std::list<Node>;
 
  public:
   BestFirstSearch(const Obstacles* const obstacles_ptr,
-                  const Weights* const weights_ptr);
+                  const Weights* const weights_ptr, const Area& area);
   ~BestFirstSearch() = default;
 
   auto search(const Node& src_node, const Node& dst_node,

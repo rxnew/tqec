@@ -27,7 +27,8 @@ class Connection {
   auto _isNonOverlappedRoutes(const Routes& routes) const -> bool;
 
  public:
-  Connection(const Endpoints& endpoints, const Obstacles& obstacles);
+  Connection(const Endpoints& endpoints, const Obstacles& obstacles,
+             const Area& area);
   ~Connection() = default;
 
   auto search() -> Routes;

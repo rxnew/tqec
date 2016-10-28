@@ -63,8 +63,12 @@ auto IO::output(const Route& route, int indent_count,
   os << indent2 << "\"route\": [";
 
   {
-    bool first = true;
-    for(const auto& node : route) {
+    auto middles = route;
+    middles.pop_front();
+    middles.pop_back();
+
+    auto first = true;
+    for(const auto& node : middles) {
       if(!first) os << ", ";
       else       first = false;
       os << node;
@@ -80,7 +84,7 @@ auto IO::output(const Routes& routes, std::ostream& os) -> void {
   os << "\"connections\": [" << std::endl;
 
   {
-    bool first = true;
+    auto first = true;
     for(const auto& route_pair : routes) {
       if(!first) os << ',' << std::endl;
       else       first = false;

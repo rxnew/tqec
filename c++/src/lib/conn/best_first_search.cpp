@@ -23,6 +23,10 @@ auto BestFirstSearch::_isObstacleNode(const Node& node) const -> bool {
   return this->obstacles_ptr_->has(node);
 }
 
+auto BestFirstSearch::_isOutsideArea(const Node& node) const -> bool {
+  return !this->area_.contains(node);
+}
+
 auto BestFirstSearch::_isDestinationNode(const Node& node) const -> bool {
   return node == this->dst_node_;
 }
@@ -42,8 +46,9 @@ auto BestFirstSearch::_createRoute(const NodeMap& visited_nodes) const
 }
 
 BestFirstSearch::BestFirstSearch(const Obstacles* const obstacles_ptr,
-                                 const Weights* const weights_ptr)
-  : obstacles_ptr_(obstacles_ptr), weights_ptr_(weights_ptr),
+                                 const Weights* const weights_ptr,
+                                 const Area& area)
+  : obstacles_ptr_(obstacles_ptr), weights_ptr_(weights_ptr), area_(area),
     compare_node_(std::bind(&BestFirstSearch::_compareNode, this,
                             std::placeholders::_1, std::placeholders::_2)) {}
 
@@ -88,7 +93,8 @@ auto BestFirstSearch::expandNode(const Node& node) const -> std::vector<Node> {
   for(auto i = 0; i < 6; i++) {
     const auto next_node = Node(node.x + nx[i], node.y + ny[i], node.z + nz[i]);
 
-    if(this->_isObstacleNode(next_node)) continue;
+    if(this->_isObstacleNode(next_node) ||
+       this->_isOutsideArea(next_node)) continue;
 
     expanded_nodes.push_back(next_node);
   }

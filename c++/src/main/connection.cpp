@@ -72,10 +72,40 @@ auto createObstacles(const std::string& filename) -> tqec::conn::Obstacles {
 
   std::string str;
   while(getline(ifs, str)) {
-    setObstacles(obstacles, str);
+    if(str.front() != '!') setObstacles(obstacles, str);
   }
 
   return std::move(obstacles);
+}
+
+auto createArea(const std::string& filename) -> tqec::conn::Area {
+  std::ifstream ifs(filename);
+
+  if(ifs.fail()) return tqec::conn::Area();
+
+  std::string str;
+  while(getline(ifs, str)) {
+    if(str.front() == '!') {
+      std::string token;
+      std::istringstream stream(str.substr(1));
+
+      std::vector<int> params;
+
+      while(getline(stream, token, ',')) {
+        params.push_back(std::stoi(token));
+      }
+
+      assert(params.size() == 6);
+
+      tqec::conn::Node pos(params[0], params[1], params[2]);
+      tqec::conn::Size size(params[3], params[4], params[5]);
+
+      return tqec::conn::Area(pos, size);
+    }
+  }
+
+  return tqec::conn::Area();
+
 }
 
 auto main(int argc, char* argv[]) -> int {
@@ -87,7 +117,10 @@ auto main(int argc, char* argv[]) -> int {
     argc >= 3 ? argv[2] : "test_data/example_endpoints.csv";
   auto endpoints = createEndpoints(endpoints_filename);
 
-  auto routes = tqec::conn::Connection(endpoints, obstacles).search();
+  auto area = createArea(obstacles_filename);
+  std::cout << area.x.max << std::endl;
+
+  auto routes = tqec::conn::Connection(endpoints, obstacles, area).search();
 
   tqec::conn::IO::output(routes);
 
