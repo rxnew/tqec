@@ -25,6 +25,7 @@ class Box:
         try:
             f = open(file_name, 'r')
         except IOError:
+            # ゲート変換データベースによる分解
             #cls.decompose()
             pass
 

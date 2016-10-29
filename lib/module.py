@@ -60,11 +60,12 @@ class Module:
         self.connect()
 
     def place(self, permissible_error_rate, permissible_size):
-        self.calculate_number_of_spares(permissible_error_rate)
+        self.optimize_spare_counts(permissible_error_rate)
         self.place_initializations()
         self.place_measurements()
         self.place_inners()
 
+        # テスト用
         self.error_rate = 0.002
         self.size = [10, 20]
 
@@ -78,8 +79,8 @@ class Module:
     def place_inners(self):
         pass
 
-    def calculate_number_of_spares(self, permissible_error_rate):
-        cmd = './bin/optimize'
+    def optimize_spare_counts(self, permissible_error_rate):
+        cmd = './bin/spare_optimization'
         pass
 
     def parallelize(self):
@@ -98,6 +99,7 @@ class Module:
         #self.convert_from_qo(qo)
 
     def connect(self):
+        cmd = './bin/connection'
         pass
 
     def convert_to_qo(self):
