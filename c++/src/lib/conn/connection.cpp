@@ -1,11 +1,25 @@
 #include "connection.hpp"
 
+#include <limits>
+
 namespace tqec {
 namespace conn {
-auto Connection::_countCosts(const Routes& routes) -> int {
+auto Connection::_countCosts(const Routes& routes) const -> int {
   auto count = 0;
   for(const auto& route_pair : routes) {
     count += route_pair.second.size();
+  }
+  return count;
+}
+
+auto Connection::_countOverlappedNodes(const Routes& routes) const -> int {
+  auto count = 0;
+  std::unordered_set<Node> passed_nodes;
+  for(const auto& route_pair : routes) {
+    for(const auto& node : route_pair.second) {
+      if(passed_nodes.count(node)) count++;
+      else                         passed_nodes.insert(node);
+    }
   }
   return count;
 }
@@ -29,31 +43,23 @@ auto Connection::_updateWeights(const Routes& routes) -> void {
   }
 }
 
-auto Connection::_isNonOverlappedRoutes(const Routes& routes) const -> bool {
-  std::unordered_set<Node> passed_nodes;
-  for(const auto& route_pair : routes) {
-    for(const auto& node : route_pair.second) {
-      if(passed_nodes.count(node)) return false;
-      passed_nodes.insert(node);
-    }
-  }
-  return true;
-}
-
 Connection::Connection(const Endpoints& endpoints, const Obstacles& obstacles,
                        const Area& area)
   : endpoints_(endpoints), obstacles_(obstacles), weights_(endpoints.size()),
     bfs_(&this->obstacles_, &this->weights_, area) {
   for(const auto& endpoint : this->endpoints_) {
     this->weights_.addRoute(endpoint.first);
+    this->obstacles_.add(endpoint.first);
+    this->obstacles_.add(endpoint.second);
   }
 }
 
 auto Connection::search() -> Routes {
-  Routes prev_routes;
-  //auto bias = 0.0f;
-  auto unchanged_counts = 0;
-  auto bias = 1.0f;
+  Routes result_routes;
+  auto result_cost = std::numeric_limits<int>::max();
+  auto result_intersection_count = std::numeric_limits<int>::max();
+  auto count = 0;
+  auto bias = 0.0f;
 
   while(true) {
     Routes routes;
@@ -65,18 +71,32 @@ auto Connection::search() -> Routes {
       routes[src_node] = route;
     }
 
-    //if(bias < 1.0f) bias += 0.05f;
-    this->_updateWeights(routes);
-
-    if(this->_isNonOverlappedRoutes(routes)) return routes;
-    if(routes == prev_routes) {
-      if(++unchanged_counts > 10) return routes;
+    auto cost = this->_countCosts(routes);
+    auto intersection_count = this->_countOverlappedNodes(routes);
+    std::cout << "Cost: " << cost << ' '
+              << "Over: " << intersection_count
+              << std::endl;
+    if(intersection_count <= result_intersection_count) {
+      if(intersection_count < result_intersection_count || cost < result_cost) {
+        result_cost = cost;
+        result_intersection_count = intersection_count;
+        result_routes = routes;
+      }
     }
-    prev_routes = routes;
-    std::cout << "Cost: " << this->_countCosts(routes) << std::endl;
+
+    if(result_intersection_count == 0) break;
+    // とりあえず1000回試行
+    if(count++ > 100) break;
+
+    if(bias < 1.0f) bias += 0.01f;
+    this->_updateWeights(routes);
   }
 
-  return Routes();
+    std::cout << "Cost: " << this->_countCosts(result_routes) << ' '
+              << "Over: " << this->_countOverlappedNodes(result_routes)
+              << std::endl;
+
+  return std::move(result_routes);
 }
 }
 }

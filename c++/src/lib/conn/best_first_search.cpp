@@ -1,16 +1,23 @@
 #include "best_first_search.hpp"
 
 #include <algorithm>
+#include <random>
 
 namespace tqec {
 namespace conn {
 // 結局バイアス項は使用していない
 // 重みはintでもいい？
 auto BestFirstSearch::_evaluateNode(const Node& node) const -> float {
+  static std::random_device random;
+  static std::mt19937 mt(random());
+  static std::uniform_real_distribution<float> gen_bias(0.0, 1.0);
+
   const auto dst_distance = this->dst_node_.distance(node);
   const auto weight = this->weights_ptr_->calculate(node, this->src_node_);
   //return static_cast<float>(std::pow(dst_distance, 2)) + weight;
-  return static_cast<float>(dst_distance) + weight;
+  //return static_cast<float>(dst_distance) + weight;
+  return static_cast<float>(dst_distance) + weight *
+    ((1 - this->bias_) * gen_bias(mt) + this->bias_);
 }
 
 auto BestFirstSearch::_compareNode(const Node& lhs,
@@ -19,7 +26,7 @@ auto BestFirstSearch::_compareNode(const Node& lhs,
 }
 
 auto BestFirstSearch::_isObstacleNode(const Node& node) const -> bool {
-  if(node != this->src_node_ || node != this->dst_node_) return false;
+  if(node == this->src_node_ || node == this->dst_node_) return false;
   return this->obstacles_ptr_->has(node);
 }
 

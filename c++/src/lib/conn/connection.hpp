@@ -22,9 +22,9 @@ class Connection {
   Weights weights_;
   BestFirstSearch bfs_;
 
-  auto _countCosts(const Routes& routes) -> int;
+  auto _countCosts(const Routes& routes) const -> int;
+  auto _countOverlappedNodes(const Routes& routes) const -> int;
   auto _updateWeights(const Routes& routes) -> void;
-  auto _isNonOverlappedRoutes(const Routes& routes) const -> bool;
 
  public:
   Connection(const Endpoints& endpoints, const Obstacles& obstacles,

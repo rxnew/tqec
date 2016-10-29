@@ -118,7 +118,6 @@ auto main(int argc, char* argv[]) -> int {
   auto endpoints = createEndpoints(endpoints_filename);
 
   auto area = createArea(obstacles_filename);
-  std::cout << area.x.max << std::endl;
 
   auto routes = tqec::conn::Connection(endpoints, obstacles, area).search();
 
