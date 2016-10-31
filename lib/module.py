@@ -1,12 +1,18 @@
+import csv
+import functools
 import json
 import os
 import re
 import subprocess
+import tempfile
 
 class Module:
-    counter = 0
-    p_gate_type_x = re.compile('braiding|toffoli|mct', re.IGNORECASE)
     dump_directory_path = './'
+    counter = 0
+    commands = {
+        'spare_optimization': './c++/bin/spare_optimization %s %f'
+    }
+    p_gate_type_x = re.compile('braiding|toffoli|mct', re.IGNORECASE)
 
     @classmethod
     def get_identity(cls, type_name):
@@ -22,22 +28,24 @@ class Module:
     @classmethod
     def load_raw(cls, identity, type_name):
         if not identity or not type_name:
-            return {}
+            return None
 
         file_name = cls.get_file_name(identity, type_name)
 
-        try:
-            f = open(file_name, 'r')
-        except IOError:
-            return {}
+        with open(file_name, 'r') as fp:
+            raw = json.load(fp)
 
-        raw = json.load(f)
         return raw
 
     @classmethod
     def load_raw_inner_format(cls, identity, type_name):
         raw = cls.load_raw(identity, type_name)
+
+        if not raw:
+            return None
+
         raw_inner_format = cls.convert_raw_to_inner_format(raw)
+
         return raw_inner_format
 
     @classmethod
@@ -50,7 +58,7 @@ class Module:
         }
 
     def __init__(self, box, raw_inners, permissible_error_rate, permissible_size):
-        self.identity   = Module.get_identity()
+        self.identity   = Module.get_identity(box.type_name)
         self.type_name  = box.type_name
         self.elements   = box.elements
         self.raw_inners = raw_inners
@@ -67,7 +75,7 @@ class Module:
 
         # テスト用
         self.error_rate = 0.002
-        self.size = [10, 20]
+        self.size = (10, 20, 10)
 
     def place_initializations(self):
         for initialization in self.elements.initializations:
@@ -80,8 +88,32 @@ class Module:
         pass
 
     def optimize_spare_counts(self, permissible_error_rate):
-        cmd = './bin/spare_optimization'
-        pass
+        if not self.raw_inners:
+            return
+
+        inners = {}
+
+        for raw_inner in self.raw_inners:
+            inner_type = raw_inner['type']
+            if inner_type in inners:
+                inners[inner_type][2] += 1
+            else:
+                cost = functools.reduce(lambda x, y: x * y, raw_inner['size'])
+                error_rate = raw_inner['error']
+                inners[inner_type] = [cost, error_rate, 1]
+
+        with tempfile.NamedTemporaryFile('w') as fp:
+            writer = csv.writer(fp)
+            for inner in inners.values():
+                writer.writerow(inner)
+            fp.flush()
+
+            cmd = Module.commands['spare_optimization'] % (fp.name, permissible_error_rate)
+            process = subprocess.Popen(cmd, shell=True, \
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            process.wait()
+            inner_counts = process.communicate()[0].decode('utf-8').rstrip().split(',')
+            print(inner_counts)
 
     def parallelize(self):
         qo = self.convert_to_qo()

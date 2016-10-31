@@ -4,9 +4,9 @@ from module import Module
 import json
 
 class Box:
+    data_directory_path = './data/box/'
     cache = {}
     deployment_cache = {}
-    data_directory_path = './data/box/'
 
     @classmethod
     def get(cls, type_name):
@@ -74,10 +74,12 @@ class Box:
         raw_inner_modules = []
 
         for (inner, number) in self.inners:
+            # テスト
             inner_permissible_error_rate = 0.4
-            inner_permissible_size = [10, 30]
+            inner_permissible_size = (10, 30)
             for i in range(number):
-                raw_inner_module = inner.deploy(inner_permissible_error_rate, inner_permissible_size)
+                raw_inner_module = inner.deploy(inner_permissible_error_rate, \
+                                                inner_permissible_size)
                 raw_inner_modules.append(raw_inner_module)
 
         self.inners.clear()
@@ -89,8 +91,8 @@ class Box:
         return raw_module
 
     def deploy_from_cache(self, permissible_error_rate, permissible_size):
-        module_identity = Box.deployment_cache.get((self.type_name, \
-                                                    permissible_error_rate, permissible_size))
+        key = (self.type_name, permissible_error_rate, permissible_size)
+        module_identity = Box.deployment_cache.get(key)
         raw_module = Module.load_raw_inner_format(module_identity, self.type_name)
         return raw_module
 

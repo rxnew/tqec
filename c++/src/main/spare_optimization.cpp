@@ -28,7 +28,7 @@ auto createModules(const std::string& filename) -> tqec::spare::Modules {
   std::ifstream ifs(filename);
   tqec::spare::Modules modules;
 
-  if(ifs.fail()) return modules;
+  assert(!ifs.fail());
 
   std::string str;
   while(getline(ifs, str)) {
@@ -41,14 +41,21 @@ auto createModules(const std::string& filename) -> tqec::spare::Modules {
 
 auto main(int argc, char* argv[]) -> int {
   assert(argc >= 3);
+
   const auto modules_filename = argv[1];
   const auto modules = createModules(modules_filename);
   const auto error_rate_threshold = std::stof(argv[2]);
 
-  auto x = tqec::spare::SA().optimize(modules, error_rate_threshold);
+  auto spare_counts = tqec::spare::SA().optimize(modules, error_rate_threshold);
 
-  for(const auto& xi : x) {
-    std::cout << xi << std::endl;
+  {
+    auto first = true;
+    for(const auto& spare_count : spare_counts) {
+      if(first) first = false;
+      else      std::cout << ',';
+      std::cout << spare_count;
+    }
+    std::cout << std::endl;
   }
 
   return 0;
