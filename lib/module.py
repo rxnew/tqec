@@ -1,3 +1,6 @@
+from util import Util
+
+import copy
 import csv
 import functools
 import json
@@ -15,22 +18,22 @@ class Module:
     p_gate_type_x = re.compile('braiding|toffoli|mct', re.IGNORECASE)
 
     @classmethod
-    def get_identity(cls, type_name):
-        identity = cls.counter
+    def get_id(cls, type_name):
+        id = cls.counter
         cls.counter += 1
-        return identity
+        return id
 
     @classmethod
-    def get_file_name(cls, identity, type_name):
+    def get_file_name(cls, id, type_name):
         return cls.dump_directory_path + 'module_' + \
-            str(identity).zfill(4) + '_' + type_name.lower() + '.json'
+            str(id).zfill(4) + '_' + type_name.lower() + '.json'
 
     @classmethod
-    def load_raw(cls, identity, type_name):
-        if not identity or not type_name:
+    def load_raw(cls, id, type_name):
+        if not id or not type_name:
             return None
 
-        file_name = cls.get_file_name(identity, type_name)
+        file_name = cls.get_file_name(id, type_name)
 
         with open(file_name, 'r') as fp:
             raw = json.load(fp)
@@ -38,8 +41,8 @@ class Module:
         return raw
 
     @classmethod
-    def load_raw_inner_format(cls, identity, type_name):
-        raw = cls.load_raw(identity, type_name)
+    def load_raw_inner_format(cls, id, type_name):
+        raw = cls.load_raw(id, type_name)
 
         if not raw:
             return None
@@ -58,9 +61,10 @@ class Module:
         }
 
     def __init__(self, box, raw_inners, permissible_error_rate, permissible_size):
-        self.identity   = Module.get_identity(box.type_name)
+        self.id   = Module.get_id(box.type_name)
         self.type_name  = box.type_name
         self.elements   = box.elements
+        self.error_rate = box.pure_error_rate
         self.raw_inners = raw_inners
 
         self.place(permissible_error_rate, permissible_size)
@@ -68,13 +72,13 @@ class Module:
         self.connect()
 
     def place(self, permissible_error_rate, permissible_size):
-        self.optimize_spare_counts(permissible_error_rate)
+        self.set_spares(permissible_error_rate)
+
         self.place_initializations()
         self.place_measurements()
         self.place_inners()
 
         # テスト用
-        self.error_rate = 0.002
         self.size = (10, 20, 10)
 
     def place_initializations(self):
@@ -87,37 +91,72 @@ class Module:
     def place_inners(self):
         pass
 
-    def optimize_spare_counts(self, permissible_error_rate):
+    def set_spares(self, permissible_error_rate):
         if not self.raw_inners:
             return
 
-        inners = {}
+        spare_counts = self.optimize_spare_counts(permissible_error_rate)
 
-        for raw_inner in self.raw_inners:
-            inner_type = raw_inner['type']
-            if inner_type in inners:
-                inners[inner_type][2] += 1
-            else:
-                cost = functools.reduce(lambda x, y: x * y, raw_inner['size'])
-                error_rate = raw_inner['error']
-                inners[inner_type] = [cost, error_rate, 1]
+        for (spare_id, spare_count) in spare_counts.items():
+            self.raw_inners[spare_id]['spare'] = spare_count
+
+        self.update_error_rate()
+
+    def update_error_rate(self):
+        success_rate = 1.0
+
+        for raw_inner in self.raw_inners.values():
+            inner_success_rate = 0.0
+
+            (e, x, n) = (raw_inner['error'], raw_inner['number'], raw_inner['spare'])
+            for i in range(x + 1):
+                inner_success_rate \
+                    += Util.combination(n + x, n + i) * pow(e, x - i) * pow(1.0 - e, n + i)
+
+            success_rate *= inner_success_rate
+
+        self.error_rate = 1.0 - success_rate
+
+    def optimize_spare_counts(self, permissible_error_rate):
+        inners_dict = self.create_spare_optimization_inners_dict()
 
         with tempfile.NamedTemporaryFile('w') as fp:
-            writer = csv.writer(fp)
-            for inner in inners.values():
-                writer.writerow(inner)
-            fp.flush()
+            # 順序保持のため必要
+            ordered_inner_ids = self.write_spare_optimization_input_file(inners_dict, fp)
 
             cmd = Module.commands['spare_optimization'] % (fp.name, permissible_error_rate)
             process = subprocess.Popen(cmd, shell=True, \
                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             process.wait()
-            inner_counts = process.communicate()[0].decode('utf-8').rstrip().split(',')
-            print(inner_counts)
+            stdout = process.communicate()[0]
+
+        spare_counts = list(map(int, stdout.decode('utf-8').rstrip().split(',')))
+
+        return {id: counts for (id, counts) in zip(ordered_inner_ids, spare_counts)}
+
+    # キーはid
+    # 値は[コスト, エラー率, 個数]
+    def create_spare_optimization_inners_dict(self):
+        return {inner_id: [
+            functools.reduce(lambda x, y: x * y, raw_inner['size']),
+            raw_inner['error'],
+            raw_inner['number']
+        ] for (inner_id, raw_inner) in self.raw_inners.items()}
+
+    def write_spare_optimization_input_file(self, inners_dict, fp):
+        writer = csv.writer(fp)
+        ordered_inner_ids = []
+
+        for (inner_id, inner) in inners_dict.items():
+            writer.writerow(inner)
+            ordered_inner_ids.append(inner_id)
+        fp.flush()
+
+        return ordered_inner_ids
 
     def parallelize(self):
         qo = self.convert_to_qo()
-        file_name = './tmp/' + str(self.identity) + '.qo'
+        file_name = './tmp/' + str(self.id) + '.qo'
         f = open(file_name, 'w')
         for gate in qo:
             f.write(gate + '\n')
@@ -125,7 +164,7 @@ class Module:
 
         cmd = './bin/parallelize ' + file_name
         #subprocess.check_call(cmd, shell=True, stdout=devnull)
-        #f = open('./tmp/' + str(self.identity) + '_result.qo', 'r')
+        #f = open('./tmp/' + str(self.id) + '_result.qo', 'r')
         #qo = [gate for gate in f]
         #f.close()
         #self.convert_from_qo(qo)
@@ -191,11 +230,11 @@ class Module:
 
     def get_raw(self):
         elements = self.elements.to_dict()
-        elements['modules'] = self.raw_inners
+        elements['modules'] = [raw_inner for raw_inner in self.raw_inners.values()]
 
         return {
             'type'    : self.type_name,
-            'id'      : self.identity,
+            'id'      : self.id,
             'size'    : self.size,
             'error'   : self.error_rate,
             'elements': elements
@@ -204,7 +243,7 @@ class Module:
     def get_raw_inner_format(self):
         return {
             'type' : self.type_name,
-            'id'   : self.identity,
+            'id'   : self.id,
             'size' : self.size,
             'error': self.error_rate
         }
@@ -214,7 +253,7 @@ class Module:
             if not os.path.isdir(Module.dump_directory_path):
                 os.makedirs(Module.dump_directory_path)
 
-            file_name = Module.get_file_name(self.identity, self.type_name)
+            file_name = Module.get_file_name(self.id, self.type_name)
             f = open(file_name, 'w')
 
         json.dump(self.get_raw(), f, indent=4)
