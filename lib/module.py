@@ -108,7 +108,7 @@ class Module:
         for raw_inner in self.raw_inners.values():
             inner_success_rate = 0.0
 
-            (e, x, n) = (raw_inner['error'], raw_inner['number'], raw_inner['spare'])
+            (e, n, x) = (raw_inner['error'], raw_inner['number'], raw_inner['spare'])
             for i in range(x + 1):
                 inner_success_rate \
                     += Util.combination(n + x, n + i) * pow(e, x - i) * pow(1.0 - e, n + i)
@@ -132,7 +132,7 @@ class Module:
 
         spare_counts = list(map(int, stdout.decode('utf-8').rstrip().split(',')))
 
-        return {id: counts for (id, counts) in zip(ordered_inner_ids, spare_counts)}
+        return {id: count for (id, count) in zip(ordered_inner_ids, spare_counts)}
 
     # キーはid
     # 値は[コスト, エラー率, 個数]
@@ -240,12 +240,13 @@ class Module:
             'elements': elements
         }
 
-    def get_raw_inner_format(self):
+    def get_raw_inner_format(self, count=1):
         return {
-            'type' : self.type_name,
-            'id'   : self.id,
-            'size' : self.size,
-            'error': self.error_rate
+            'type'  : self.type_name,
+            'id'    : self.id,
+            'size'  : self.size,
+            'error' : self.error_rate,
+            'number': count
         }
 
     def dump(self, f=None):
