@@ -77,20 +77,6 @@ class Module:
     def place(self, permissible_error_rate, permissible_size):
         self.set_spares(permissible_error_rate)
 
-        self.place_initializations()
-        self.place_measurements()
-        self.place_inners()
-
-    def place_initializations(self):
-        for initialization in self.elements.initializations:
-            initialization['column'] = 0
-
-    def place_measurements(self):
-        pass
-
-    def place_inners(self):
-        pass
-
     def set_spares(self, permissible_error_rate):
         if not self.raw_inners:
             return
@@ -169,6 +155,21 @@ class Module:
         #f.close()
         #self.convert_from_qo(qo)
 
+        self.set_bits()
+
+    def set_bits(self):
+        # テスト
+        #x = self.get_time_axis_direction_length()
+        x = 10
+
+        for (index, bit) in enumerate(self.elements.bits):
+            self.elements.bits[index] = {
+                'id'   : index,
+                'range': [0, x]
+                #'source'     : [[0, index, 0], [0, index, 1]],
+                #'destination': [[x, index, 0], [x, index, 1]]
+            }
+
     def connect(self):
         cmd = './bin/connection'
         pass
@@ -242,11 +243,34 @@ class Module:
 
     def get_raw_inner_format(self, count=1):
         return {
-            'type'  : self.type_name,
-            'id'    : self.id,
-            'size'  : self.size,
-            'error' : self.error_rate,
-            'number': count
+            'type'   : self.type_name,
+            'id'     : self.id,
+            'size'   : self.size,
+            'error'  : self.error_rate,
+            'inputs' : self.get_raw_input_format(),
+            'outputs': self.get_raw_output_format(),
+            'number' : count
+        }
+
+    def get_raw_input_format(self):
+        return [self.get_raw_io_format(input, 0) for input in self.elements.inputs]
+
+    def get_raw_output_format(self):
+        return [self.get_raw_io_format(output, 1) for output in self.elements.outputs]
+
+    def get_raw_io_format(self, io, either):
+        if type(io) == dict:
+            return io
+
+        print(io)
+        bit = self.elements.bits[io]
+
+        return {
+            'id': bit['id'],
+            'positions': [
+                [bit['range'][either], bit['id'], 0],
+                [bit['range'][either], bit['id'], 1]
+            ]
         }
 
     def dump(self, indent=4):

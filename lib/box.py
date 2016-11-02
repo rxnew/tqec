@@ -26,14 +26,14 @@ class Box:
         file_name = cls.data_directory_path + type_name.lower() + '.json'
 
         try:
-            f = open(file_name, 'r')
+            fp = open(file_name, 'r')
         except IOError:
             # ゲート変換データベースによる分解
             #cls.decompose()
             pass
 
-        raw = json.load(f)
-        f.close()
+        raw = json.load(fp)
+        fp.close()
 
         return raw
 
@@ -91,11 +91,11 @@ class Box:
 
     def deploy_inners(self, permissible_error_rate, permissible_size):
         raw_inner_modules = {}
-        inner_args = self.inner_deployment_args_generator(permissible_error_rate, \
-                                                          permissible_size)
+        inner_args_func = self.create_inner_deployment_args_func(permissible_error_rate, \
+                                                                 permissible_size)
 
         for (inner, inner_count) in self.inners:
-            (inner_permissible_error_rate, inner_permissible_size) = inner_args(inner)
+            (inner_permissible_error_rate, inner_permissible_size) = inner_args_func(inner)
 
             for i in range(inner_count):
                 raw_inner_module = inner.deploy(inner_permissible_error_rate, \
@@ -111,23 +111,20 @@ class Box:
 
         return raw_inner_modules
 
-    def inner_deployment_args_generator(self, permissible_error_rate, permissible_size):
+    def create_inner_deployment_args_func(self, permissible_error_rate, permissible_size):
         scale = permissible_error_rate / self.pure_error_rate
         sum_inner_pure_error_rate = sum([i[0].pure_error_rate for i in self.inners])
 
-        def generate(inner):
+        def inner_deployment_args_func(inner):
             inner_permissible_error_rate = pow(inner.pure_error_rate, 2) * \
                                            scale / sum_inner_pure_error_rate
             # テスト
             inner_permissible_size = permissible_size
+
             return (inner_permissible_error_rate, inner_permissible_size)
 
-        return generate
+        return inner_deployment_args_func
 
     def cache_module_id(self, module_id, permissible_error_rate, permissible_size):
         key = (self.type_name, permissible_error_rate, permissible_size)
         Box.deployment_cache[key] = module_id
-
-class FormatError(Exception):
-    def __init__(self, message):
-        self.message = message

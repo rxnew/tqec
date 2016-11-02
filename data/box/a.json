@@ -1,6 +1,14 @@
 {
-    "nested": true,
     "error" : 0.1,
     "elements": {
+        "outputs": [
+            {
+                "id": 0,
+                "positions": [
+                    [10, 2, 0],
+                    [10, 2, 1]
+                ]
+            }
+        ]
     }
 }
