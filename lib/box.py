@@ -74,12 +74,29 @@ class Box:
         if raw_module:
             return raw_module
 
+        raw_inner_modules = self.deploy_inners(permissible_error_rate, permissible_size)
+        module = Module(self, raw_inner_modules, permissible_error_rate, permissible_size)
+        module.dump()
+        self.cache_module_id(module.id, permissible_error_rate, permissible_size)
+        raw_module = module.get_raw_inner_format()
+
+        return raw_module
+
+    def deploy_from_cache(self, permissible_error_rate, permissible_size):
+        key = (self.type_name, permissible_error_rate, permissible_size)
+        module_id = Box.deployment_cache.get(key)
+        raw_module = Module.load_raw_inner_format(module_id, self.type_name)
+
+        return raw_module
+
+    def deploy_inners(self, permissible_error_rate, permissible_size):
         raw_inner_modules = {}
         inner_args = self.inner_deployment_args_generator(permissible_error_rate, \
                                                           permissible_size)
 
         for (inner, inner_count) in self.inners:
             (inner_permissible_error_rate, inner_permissible_size) = inner_args(inner)
+
             for i in range(inner_count):
                 raw_inner_module = inner.deploy(inner_permissible_error_rate, \
                                                 inner_permissible_size)
@@ -92,20 +109,7 @@ class Box:
 
         self.inners.clear()
 
-        module = Module(self, raw_inner_modules, permissible_error_rate, permissible_size)
-        module.dump()
-        self.cache_module_id(module.id, permissible_error_rate, permissible_size)
-
-        raw_module = module.get_raw_inner_format()
-
-        return raw_module
-
-    def deploy_from_cache(self, permissible_error_rate, permissible_size):
-        key = (self.type_name, permissible_error_rate, permissible_size)
-        module_id = Box.deployment_cache.get(key)
-        raw_module = Module.load_raw_inner_format(module_id, self.type_name)
-
-        return raw_module
+        return raw_inner_modules
 
     def inner_deployment_args_generator(self, permissible_error_rate, permissible_size):
         scale = permissible_error_rate / self.pure_error_rate
