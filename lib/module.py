@@ -71,15 +71,15 @@ class Module:
         self.parallelize()
         self.connect()
 
+        # テスト用
+        self.size = (10, 20, 10)
+
     def place(self, permissible_error_rate, permissible_size):
         self.set_spares(permissible_error_rate)
 
         self.place_initializations()
         self.place_measurements()
         self.place_inners()
-
-        # テスト用
-        self.size = (10, 20, 10)
 
     def place_initializations(self):
         for initialization in self.elements.initializations:
@@ -249,12 +249,12 @@ class Module:
             'number': count
         }
 
-    def dump(self, f=None):
-        if not f:
-            if not os.path.isdir(Module.dump_directory_path):
-                os.makedirs(Module.dump_directory_path)
+    def dump(self, indent=4):
+        if not os.path.isdir(Module.dump_directory_path):
+            os.makedirs(Module.dump_directory_path)
 
-            file_name = Module.get_file_name(self.id, self.type_name)
-            f = open(file_name, 'w')
+        file_name = Module.get_file_name(self.id, self.type_name)
 
-        json.dump(self.get_raw(), f, indent=4)
+        with open(file_name, 'w') as fp:
+            json.dump(self.get_raw(), fp, indent=indent)
+            fp.flush()
