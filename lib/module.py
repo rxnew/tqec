@@ -2,16 +2,18 @@ from util import Util
 
 import copy
 import csv
-import functools
 import json
 import os
 import re
 import subprocess
 import tempfile
 
+from collections import OrderedDict
+from functools import reduce
+
 class Module:
     dump_directory_path = './'
-    counter = 0
+    counter = {}
     commands = {
         'spare_optimization': './c++/bin/spare_optimization %s %f'
     }
@@ -19,53 +21,21 @@ class Module:
 
     @classmethod
     def get_id(cls, type_name):
-        id = cls.counter
-        cls.counter += 1
-        return id
+        number = cls.counter.get(type_name, 0)
+        cls.counter[type_name] = number + 1
+
+        return type_name.lower() + '_' + str(number)
 
     @classmethod
-    def get_file_name(cls, id, type_name):
-        return cls.dump_directory_path + 'module_' + \
-            str(id).zfill(4) + '_' + type_name.lower() + '.json'
+    def get_file_name(cls, id):
+        return cls.dump_directory_path + 'module_' + id + '.json'
 
-    @classmethod
-    def load_raw(cls, id, type_name):
-        if not id or not type_name:
-            return None
-
-        file_name = cls.get_file_name(id, type_name)
-
-        with open(file_name, 'r') as fp:
-            raw = json.load(fp)
-
-        return raw
-
-    @classmethod
-    def load_raw_inner_format(cls, id, type_name):
-        raw = cls.load_raw(id, type_name)
-
-        if not raw:
-            return None
-
-        raw_inner_format = cls.convert_raw_to_inner_format(raw)
-
-        return raw_inner_format
-
-    @classmethod
-    def convert_raw_to_inner_format(cls, raw):
-        return {
-            'type' : raw.get('type_name', ''),
-            'id'   : raw.get('id', ''),
-            'size' : raw.get('size', ''),
-            'error': raw.get('error', '')
-        }
-
-    def __init__(self, box, raw_inners, permissible_error_rate, permissible_size):
-        self.id   = Module.get_id(box.type_name)
+    def __init__(self, box, inners, permissible_error_rate, permissible_size):
+        self.id         = Module.get_id(box.type_name)
         self.type_name  = box.type_name
         self.elements   = box.elements
         self.error_rate = box.pure_error_rate
-        self.raw_inners = raw_inners
+        self.inners     = inners
 
         self.place(permissible_error_rate, permissible_size)
         self.parallelize()
@@ -78,23 +48,23 @@ class Module:
         self.set_spares(permissible_error_rate)
 
     def set_spares(self, permissible_error_rate):
-        if not self.raw_inners:
+        if self.is_elementary():
             return
 
         spare_counts = self.optimize_spare_counts(permissible_error_rate)
 
         for (spare_id, spare_count) in spare_counts.items():
-            self.raw_inners[spare_id]['spare'] = spare_count
+            self.inners[spare_id].spare_count = spare_count
 
         self.update_error_rate()
 
     def update_error_rate(self):
         success_rate = 1.0
 
-        for raw_inner in self.raw_inners.values():
+        for inner in self.inners.values():
             inner_success_rate = 0.0
 
-            (e, n, x) = (raw_inner['error'], raw_inner['number'], raw_inner['spare'])
+            (e, n, x) = (inner.error_rate, inner.count, inner.spare_count)
             for i in range(x + 1):
                 inner_success_rate \
                     += Util.combination(n + x, n + i) * pow(e, x - i) * pow(1.0 - e, n + i)
@@ -124,10 +94,10 @@ class Module:
     # 値は[コスト, エラー率, 個数]
     def create_spare_optimization_inners_dict(self):
         return {inner_id: [
-            functools.reduce(lambda x, y: x * y, raw_inner['size']),
-            raw_inner['error'],
-            raw_inner['number']
-        ] for (inner_id, raw_inner) in self.raw_inners.items()}
+            reduce(lambda x, y: x * y, inner.size),
+            inner.error_rate,
+            inner.count
+        ] for (inner_id, inner) in self.inners.items()}
 
     def write_spare_optimization_input_file(self, inners_dict, fp):
         writer = csv.writer(fp)
@@ -231,54 +201,24 @@ class Module:
 
     def get_raw(self):
         elements = self.elements.to_dict()
-        elements['modules'] = [raw_inner for raw_inner in self.raw_inners.values()]
+        elements['modules'] = [inner.get_raw() for inner in self.inners.values()]
 
-        return {
-            'type'    : self.type_name,
-            'id'      : self.id,
-            'size'    : self.size,
-            'error'   : self.error_rate,
-            'elements': elements
-        }
-
-    def get_raw_inner_format(self, count=1):
-        return {
-            'type'   : self.type_name,
-            'id'     : self.id,
-            'size'   : self.size,
-            'error'  : self.error_rate,
-            'inputs' : self.get_raw_input_format(),
-            'outputs': self.get_raw_output_format(),
-            'number' : count
-        }
-
-    def get_raw_input_format(self):
-        return [self.get_raw_io_format(input, 0) for input in self.elements.inputs]
-
-    def get_raw_output_format(self):
-        return [self.get_raw_io_format(output, 1) for output in self.elements.outputs]
-
-    def get_raw_io_format(self, io, either):
-        if type(io) == dict:
-            return io
-
-        print(io)
-        bit = self.elements.bits[io]
-
-        return {
-            'id': bit['id'],
-            'positions': [
-                [bit['range'][either], bit['id'], 0],
-                [bit['range'][either], bit['id'], 1]
-            ]
-        }
+        return OrderedDict((
+            ('id'      , self.id),
+            ('size'    , self.size),
+            ('error'   , self.error_rate),
+            ('elements', elements)
+        ))
 
     def dump(self, indent=4):
         if not os.path.isdir(Module.dump_directory_path):
             os.makedirs(Module.dump_directory_path)
 
-        file_name = Module.get_file_name(self.id, self.type_name)
+        file_name = Module.get_file_name(self.id)
 
         with open(file_name, 'w') as fp:
             json.dump(self.get_raw(), fp, indent=indent)
             fp.flush()
+
+    def is_elementary(self):
+        return len(self.inners) == 0

@@ -1,3 +1,5 @@
+from collections import OrderedDict
+
 class Elements:
     def __init__(self, elements):
         self.bits            = elements.get('bits', [])
@@ -8,11 +10,11 @@ class Elements:
         self.operations      = elements.get('operations', [])
 
     def to_dict(self):
-        return {
-            'bits'           : self.bits,
-            'inputs'         : self.inputs,
-            'outputs'        : self.outputs,
-            'initializations': self.initializations,
-            'measurements'   : self.measurements,
-            'operations'     : self.operations
-        }
+        return OrderedDict((
+            ('bits'           , self.bits),
+            ('inputs'         , self.inputs),
+            ('outputs'        , self.outputs),
+            ('initializations', self.initializations),
+            ('measurements'   , self.measurements),
+            ('operations'     , self.operations)
+        ))

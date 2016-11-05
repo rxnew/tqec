@@ -1,10 +1,12 @@
-from module import Module
-
-import functools
-from collections import defaultdict
 from elements import Elements
+from inner_module import InnerModule
+from module import Module
+from util import Util
 
 import json
+import sympy
+
+from functools import reduce
 
 class Box:
     data_directory_path = './data/box/'
@@ -69,28 +71,32 @@ class Box:
         self.pure_error_rate = 1.0 - pure_success_rate
 
     def deploy(self, permissible_error_rate, permissible_size):
-        raw_module = self.deploy_from_cache(permissible_error_rate, permissible_size)
+        inner_module = self.deploy_from_cache(permissible_error_rate, permissible_size)
 
-        if raw_module:
-            return raw_module
+        if inner_module:
+            return inner_module
 
-        raw_inner_modules = self.deploy_inners(permissible_error_rate, permissible_size)
-        module = Module(self, raw_inner_modules, permissible_error_rate, permissible_size)
+        inner_modules = self.deploy_inners(permissible_error_rate, permissible_size)
+        module = Module(self, inner_modules, permissible_error_rate, permissible_size)
         module.dump()
         self.cache_module_id(module.id, permissible_error_rate, permissible_size)
-        raw_module = module.get_raw_inner_format()
+        inner_module = InnerModule(module)
 
-        return raw_module
+        return inner_module
 
     def deploy_from_cache(self, permissible_error_rate, permissible_size):
         key = (self.type_name, permissible_error_rate, permissible_size)
         module_id = Box.deployment_cache.get(key)
-        raw_module = Module.load_raw_inner_format(module_id, self.type_name)
+        inner_module = InnerModule.load(module_id)
 
-        return raw_module
+        return inner_module
 
     def deploy_inners(self, permissible_error_rate, permissible_size):
-        raw_inner_modules = {}
+        inner_modules = {}
+
+        if self.is_elementary():
+            return inner_modules
+
         inner_args_func = self.create_inner_deployment_args_func(permissible_error_rate, \
                                                                  permissible_size)
 
@@ -98,26 +104,28 @@ class Box:
             (inner_permissible_error_rate, inner_permissible_size) = inner_args_func(inner)
 
             for i in range(inner_count):
-                raw_inner_module = inner.deploy(inner_permissible_error_rate, \
-                                                inner_permissible_size)
-                inner_module_id = raw_inner_module['id']
+                inner_module = inner.deploy(inner_permissible_error_rate, \
+                                            inner_permissible_size)
 
-                if inner_module_id in raw_inner_modules:
-                    raw_inner_modules[inner_module_id]['number'] += 1
+                if inner_module.id in inner_modules:
+                    inner_modules[inner_module.id].count += 1
                 else:
-                    raw_inner_modules[inner_module_id] = raw_inner_module
+                    inner_modules[inner_module.id] = inner_module
 
         self.inners.clear()
 
-        return raw_inner_modules
+        return inner_modules
 
     def create_inner_deployment_args_func(self, permissible_error_rate, permissible_size):
-        scale = permissible_error_rate / self.pure_error_rate
-        sum_inner_pure_error_rate = sum([i[0].pure_error_rate for i in self.inners])
+        assert(not self.is_elementary())
+
+        f = self.create_permissible_error_rate_func(permissible_error_rate)
 
         def inner_deployment_args_func(inner):
-            inner_permissible_error_rate = pow(inner.pure_error_rate, 2) * \
-                                           scale / sum_inner_pure_error_rate
+            if inner.is_elementary():
+                return (inner.pure_error_rate, permissible_size)
+
+            inner_permissible_error_rate = f(inner.pure_error_rate)
             # テスト
             inner_permissible_size = permissible_size
 
@@ -125,6 +133,28 @@ class Box:
 
         return inner_deployment_args_func
 
+    def create_permissible_error_rate_func(self, permissible_error_rate):
+        # ニュートン法における許容誤差
+        e = 0.00001
+
+        m = sympy.Symbol('m')
+        x = sympy.Symbol('x')
+
+        f = -m * x + 1
+
+        g = 1
+        for (inner, inner_count) in self.inners:
+            g *= f.subs([(x, inner.pure_error_rate)]) ** inner_count
+        g -= 1 - permissible_error_rate
+
+        m0 = Util.newton_raphson_method(g, m, e, lambda e, y: y < 0 or y > e)
+        h = 1 - f.subs([(m, m0)])
+
+        return lambda xi: h.subs([(x, xi)])
+
     def cache_module_id(self, module_id, permissible_error_rate, permissible_size):
         key = (self.type_name, permissible_error_rate, permissible_size)
         Box.deployment_cache[key] = module_id
+
+    def is_elementary(self):
+        return not self.inners

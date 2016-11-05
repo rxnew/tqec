@@ -1,0 +1,64 @@
+{
+    "elements": {
+        "bits"   : [0, 1, 2, 3],
+        "inputs" : [1],
+        "outputs": [1],
+        "initializations": [
+            {
+                "bit" : 0,
+                "type": "Y"
+            },
+            {
+                "bit" : 2,
+                "type": "Y"
+            },
+            {
+                "bit" : 3,
+                "type": "Y"
+            }
+        ],
+        "measurements": [
+            {
+                "bit"  : 0,
+                "basis": "X"
+            },
+            {
+                "bit"  : 2,
+                "basis": "X"
+            },
+            {
+                "bit"  : 3,
+                "basis": "X"
+            }
+        ],
+        "operations": [
+            {
+                "type": "braiding",
+                "bits": {
+                    "controls": [0],
+                    "targets" : [1]
+                }
+            },
+            {
+                "type": "braiding",
+                "bits": {
+                    "controls": [2],
+                    "targets" : [1]
+                }
+            },
+            {
+                "type": "braiding",
+                "bits": {
+                    "controls": [3],
+                    "targets" : [1]
+                }
+            }
+        ],
+        "boxes": [
+            {
+                "type"  : "Y",
+                "number": 3
+            }
+        ]
+    }
+}

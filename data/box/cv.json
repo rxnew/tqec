@@ -1,0 +1,67 @@
+{
+    "elements": {
+        "bits"   : [0, 1],
+        "inputs" : [0, 1],
+        "outputs": [0, 1],
+        "initializations": [
+        ],
+        "measurements": [
+        ],
+        "operations": [
+            {
+                "type": "T+",
+                "bits": {
+                    "targets" : [0]
+                }
+            },
+            {
+                "type": "H",
+                "bits": {
+                    "targets" : [1]
+                }
+            },
+            {
+                "type": "braiding",
+                "bits": {
+                    "controls": [1],
+                    "targets" : [0]
+                }
+            },
+            {
+                "type": "T",
+                "bits": {
+                    "targets" : [0]
+                }
+            },
+            {
+                "type": "T+",
+                "bits": {
+                    "targets" : [1]
+                }
+            },
+            {
+                "type": "braiding",
+                "bits": {
+                    "controls": [1],
+                    "targets" : [0]
+                }
+            },
+            {
+                "type": "H",
+                "bits": {
+                    "targets" : [1]
+                }
+            }
+        ],
+        "boxes": [
+            {
+                "type"  : "T",
+                "number": 2
+            },
+            {
+                "type"  : "H",
+                "number": 2
+            }
+        ]
+    }
+}
