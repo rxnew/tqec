@@ -119,13 +119,13 @@ class Box:
     def create_inner_deployment_args_func(self, permissible_error_rate, permissible_size):
         assert(not self.is_elementary())
 
-        f = self.create_permissible_error_rate_func(permissible_error_rate)
+        error_rate_func = self.create_permissible_error_rate_func(permissible_error_rate)
 
         def inner_deployment_args_func(inner):
             if inner.is_elementary():
                 return (inner.pure_error_rate, permissible_size)
 
-            inner_permissible_error_rate = f(inner.pure_error_rate)
+            inner_permissible_error_rate = error_rate_func(inner.pure_error_rate)
             # テスト
             inner_permissible_size = permissible_size
 
