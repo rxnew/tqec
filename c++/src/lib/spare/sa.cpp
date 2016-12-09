@@ -41,8 +41,8 @@ auto SA::_generate(const Counts& counts) const -> Counts {
 auto SA::_accept(float temperature, float prev_energy,
                  float next_energy) const -> bool {
   static std::random_device rnd;
-  static std::mt19937 mt(rnd());
-  static std::uniform_int_distribution<int> i(0, 1);
+  static auto mt = std::mt19937(rnd());
+  static auto i = std::uniform_int_distribution<int>(0, 1);
 
   auto diff = prev_energy - next_energy;
   if(diff > 0.0f) return true;
@@ -60,8 +60,8 @@ auto SA::_weight(float energy, bool satisfied) const -> float {
 }
 
 auto SA::_constraints(const Counts& counts) const -> bool {
-  auto g = [](float e, int n, int x) {
-    float res = 0.0f;
+  auto g = [](auto e, auto n, auto x) {
+    auto res = 0.0f;
     for(auto i = 0; i <= x; i++) {
       res += util::combination(n + x, n + i) *
              std::pow(e, x - i) * std::pow(1.0f - e, n + i);

@@ -6,10 +6,9 @@
 #include <iostream>
 
 auto createModule(const std::string& str) -> tqec::spare::Module {
-  std::string token;
-  std::istringstream stream(str);
-
-  std::vector<float> params;
+  auto token = std::string();
+  auto stream = std::istringstream(str);
+  auto params = std::vector<float>();
 
   while(getline(stream, token, ',')) {
     params.push_back(std::stof(token));
@@ -25,12 +24,12 @@ auto createModule(const std::string& str) -> tqec::spare::Module {
 }
 
 auto createModules(const std::string& filename) -> tqec::spare::Modules {
-  std::ifstream ifs(filename);
-  tqec::spare::Modules modules;
+  auto ifs = std::ifstream(filename);
+  auto modules = tqec::spare::Modules();
 
   assert(!ifs.fail());
 
-  std::string str;
+  auto str = std::string();
   while(getline(ifs, str)) {
     const auto module = createModule(str);
     modules.push_back(module);

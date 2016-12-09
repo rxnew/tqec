@@ -137,9 +137,7 @@ class Box:
         # ニュートン法における許容誤差
         e = 0.00001
 
-        m = sympy.Symbol('m')
-        x = sympy.Symbol('x')
-
+        (m, x) = sympy.symbols('m x')
         f = -m * x + 1
 
         g = 1
@@ -150,7 +148,7 @@ class Box:
         m0 = Util.newton_raphson_method(g, m, e, lambda e, y: y < 0 or y > e)
         h = 1 - f.subs([(m, m0)])
 
-        return lambda xi: h.subs([(x, xi)])
+        return lambda xi: float(h.subs([(x, xi)]))
 
     def cache_module_id(self, module_id, permissible_error_rate, permissible_size):
         key = (self.type_name, permissible_error_rate, permissible_size)
