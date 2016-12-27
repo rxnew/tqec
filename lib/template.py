@@ -8,8 +8,8 @@ import sympy
 
 from functools import reduce
 
-class Box:
-    data_directory_path = './data/box/'
+class Template:
+    data_directory_path = './data/templates/'
     cache = {}
     deployment_cache = {}
 
@@ -18,10 +18,10 @@ class Box:
         if type_name in cls.cache:
             return cls.cache[type_name]
 
-        box = Box(type_name)
-        cls.cache[type_name] = box
+        template = Template(type_name)
+        cls.cache[type_name] = template
 
-        return box
+        return template
 
     @classmethod
     def get_raw(cls, type_name):
@@ -45,14 +45,14 @@ class Box:
         return super().__new__(cls)
 
     def __init__(self, type_name):
-        raw = Box.get_raw(type_name)
+        raw = Template.get_raw(type_name)
 
         self.type_name = type_name
         self.pure_error_rate = raw.get('error', 0.0)
         self.elements = Elements(raw.get('elements', {}))
         self.inners = []
 
-        self.set_inners(raw.get('elements', {}).get('boxes', []))
+        self.set_inners(raw.get('elements', {}).get('templates', []))
 
     def set_inners(self, raw_inners):
         pure_success_rate = 1.0 - self.pure_error_rate
@@ -64,7 +64,7 @@ class Box:
             if not inner_type:
                 continue
 
-            inner = Box.get(inner_type)
+            inner = Template.get(inner_type)
             self.inners.append((inner, inner_count))
             pure_success_rate *= pow(1.0 - inner.pure_error_rate, inner_count)
 
@@ -86,7 +86,7 @@ class Box:
 
     def deploy_from_cache(self, permissible_error_rate, permissible_size):
         key = (self.type_name, permissible_error_rate, permissible_size)
-        module_id = Box.deployment_cache.get(key)
+        module_id = Template.deployment_cache.get(key)
         inner_module = InnerModule.load(module_id)
 
         return inner_module
@@ -152,7 +152,7 @@ class Box:
 
     def cache_module_id(self, module_id, permissible_error_rate, permissible_size):
         key = (self.type_name, permissible_error_rate, permissible_size)
-        Box.deployment_cache[key] = module_id
+        Template.deployment_cache[key] = module_id
 
     def is_elementary(self):
         return not self.inners

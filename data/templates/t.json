@@ -10,10 +10,7 @@
             },
             {
                 "bit" : 2,
-                "type": {
-                    "basis": "Z",
-                    "value": 0
-                }
+                "type": "Z"
             },
             {
                 "bit" : 3,
@@ -21,17 +18,11 @@
             },
             {
                 "bit" : 4,
-                "type": {
-                    "basis": "X",
-                    "value": 0
-                }
+                "type": "X"
             },
             {
                 "bit" : 5,
-                "type": {
-                    "basis": "Z",
-                    "value": 0
-                }
+                "type": "Z"
             }
         ],
         "measurements": [
@@ -104,7 +95,7 @@
                 }
             }
         ],
-        "boxes": [
+        "templates": [
             {
                 "type"  : "Y",
                 "number": 1

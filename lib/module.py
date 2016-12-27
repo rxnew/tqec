@@ -30,11 +30,11 @@ class Module:
     def get_file_name(cls, id):
         return cls.dump_directory_path + 'module_' + id + '.json'
 
-    def __init__(self, box, inners, permissible_error_rate, permissible_size):
-        self.id         = Module.get_id(box.type_name)
-        self.type_name  = box.type_name
-        self.elements   = box.elements
-        self.error_rate = box.pure_error_rate
+    def __init__(self, template, inners, permissible_error_rate, permissible_size):
+        self.id         = Module.get_id(template.type_name)
+        self.type_name  = template.type_name
+        self.elements   = template.elements
+        self.error_rate = template.pure_error_rate
         self.inners     = inners
 
         self.place(permissible_error_rate, permissible_size)
