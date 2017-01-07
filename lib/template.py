@@ -1,6 +1,7 @@
 from circuit import Circuit
 from inner_module import InnerModule
 from module import Module
+from completion import Completion
 from util import Util
 
 import json
@@ -11,21 +12,21 @@ from functools import reduce
 
 class Template:
     data_directory_path = './data/templates/'
-    cache = {}
-    deployment_cache = {}
+    __cache = {}
+    __deployment_cache = {}
 
     @classmethod
-    def get(cls, type_name):
-        if type_name in cls.cache:
-            return cls.cache[type_name]
+    def load(cls, type_name):
+        if type_name in cls.__cache:
+            return cls.__cache[type_name]
 
         template = Template(type_name)
-        cls.cache[type_name] = template
+        cls.__cache[type_name] = template
 
         return template
 
     @classmethod
-    def get_raw(cls, type_name):
+    def __load(cls, type_name):
         file_name = cls.data_directory_path + type_name.lower() + '.json'
 
         try:
@@ -35,10 +36,10 @@ class Template:
             #cls.decompose()
             pass
 
-        raw = json.load(fp)
+        json_obj = Completion.icpm(json.load(fp))
         fp.close()
 
-        return raw
+        return json_obj
 
     def __new__(cls, type_name):
         if not type_name:
@@ -46,84 +47,84 @@ class Template:
         return super().__new__(cls)
 
     def __init__(self, type_name):
-        raw = Template.get_raw(type_name)
+        json_obj = Template.__load(type_name)
 
         self.type_name = type_name
-        self.pure_error_rate = raw.get('error', 0.0)
-        self.circuit = Circuit(raw.get('circuit', {}))
+        self.pure_error_rate = json_obj.get('error', 0.0)
+        self.circuit = json_obj.get('circuit', {})
         self.inners = []
 
-        self.set_inners(self.make_raw_inners())
+        self.__set_inners(self.__collect_inners())
 
-    def make_raw_inners(self):
-        initializations = self.circuit.initializations
-        gates = self.circuit.gates
+    def deploy(self, permissible_error_rate, permissible_size):
+        inner_module = self.__deploy_from_cache(permissible_error_rate, permissible_size)
+
+        if inner_module:
+            return inner_module
+
+        inner_modules = self.__deploy_inners(permissible_error_rate, permissible_size)
+        module = Module(self, inner_modules, permissible_error_rate, permissible_size)
+        module.dump()
+        key = (self.type_name, permissible_error_rate, permissible_size)
+        Template.__deployment_cache[key] = module.id
+        inner_module = InnerModule(module)
+
+        return inner_module
+
+    def is_elementary(self):
+        return not self.inners
+
+    def __collect_inners(self):
+        initializations = self.circuit['initializations']
+        operations = self.circuit['operations']
 
         inners = defaultdict(int)
 
-        for initialization in initializations:
-            if initialization.type != 'x' or initialization.type != '-x' or\
-               initialization.type != 'z' or initialization.type != '-z':
-                inners[initialization.type] += 1
+        for elements in [initializations, operations]:
+            for element in elements:
+                if element['type'] == 'pin':
+                    inners[element['module']] += 1
 
-        for gate in gates:
-            if gate.type != 'cnot':
-                inners[gate.type] += 1
+        return [{'type': key, 'number': value} for key, value in inners.items()]
 
-        return [{'type': key, 'number', value} for key, value in inners.items()]
-
-    def set_inners(self, raw_inners):
+    def __set_inners(self, inners):
         pure_success_rate = 1.0 - self.pure_error_rate
 
-        for raw_inner in raw_inners:
-            inner_type = raw_inner.get('type')
-            inner_count = raw_inner.get('number', 1)
+        for inner in inners:
+            inner_type = inner['type']
+            inner_count = inner['number']
 
             if not inner_type:
                 continue
 
-            inner = Template.get(inner_type)
+            inner = Template.load(inner_type)
             self.inners.append((inner, inner_count))
             pure_success_rate *= pow(1.0 - inner.pure_error_rate, inner_count)
 
         self.pure_error_rate = 1.0 - pure_success_rate
 
-    def deploy(self, permissible_error_rate, permissible_size):
-        inner_module = self.deploy_from_cache(permissible_error_rate, permissible_size)
-
-        if inner_module:
-            return inner_module
-
-        inner_modules = self.deploy_inners(permissible_error_rate, permissible_size)
-        module = Module(self, inner_modules, permissible_error_rate, permissible_size)
-        module.dump()
-        self.cache_module_id(module.id, permissible_error_rate, permissible_size)
-        inner_module = InnerModule(module)
-
-        return inner_module
-
-    def deploy_from_cache(self, permissible_error_rate, permissible_size):
+    def __deploy_from_cache(self, permissible_error_rate, permissible_size):
         key = (self.type_name, permissible_error_rate, permissible_size)
-        module_id = Template.deployment_cache.get(key)
+        module_id = Template.__deployment_cache.get(key)
         inner_module = InnerModule.load(module_id)
 
         return inner_module
 
-    def deploy_inners(self, permissible_error_rate, permissible_size):
+    def __deploy_inners(self, permissible_error_rate, permissible_size):
         inner_modules = {}
 
         if self.is_elementary():
             return inner_modules
 
-        inner_args_func = self.create_inner_deployment_args_func(permissible_error_rate, \
-                                                                 permissible_size)
+        inner_args_func \
+            = self.__make_deployment_args_func(permissible_error_rate, permissible_size)
 
         for (inner, inner_count) in self.inners:
             (inner_permissible_error_rate, inner_permissible_size) = inner_args_func(inner)
 
             for i in range(inner_count):
-                inner_module = inner.deploy(inner_permissible_error_rate, \
-                                            inner_permissible_size)
+                inner_module \
+                    = inner.deploy(inner_permissible_error_rate, inner_permissible_size)
 
                 if inner_module.id in inner_modules:
                     inner_modules[inner_module.id].count += 1
@@ -134,12 +135,12 @@ class Template:
 
         return inner_modules
 
-    def create_inner_deployment_args_func(self, permissible_error_rate, permissible_size):
+    def __make_deployment_args_func(self, permissible_error_rate, permissible_size):
         assert(not self.is_elementary())
 
-        error_rate_func = self.create_permissible_error_rate_func(permissible_error_rate)
+        error_rate_func = self.__make_permissible_error_rate_func(permissible_error_rate)
 
-        def inner_deployment_args_func(inner):
+        def make_deployment_args(inner):
             if inner.is_elementary():
                 return (inner.pure_error_rate, permissible_size)
 
@@ -149,9 +150,9 @@ class Template:
 
             return (inner_permissible_error_rate, inner_permissible_size)
 
-        return inner_deployment_args_func
+        return make_deployment_args
 
-    def create_permissible_error_rate_func(self, permissible_error_rate):
+    def __make_permissible_error_rate_func(self, permissible_error_rate):
         # ニュートン法における許容誤差
         e = 0.00001
 
@@ -167,10 +168,3 @@ class Template:
         h = 1 - f.subs([(m, m0)])
 
         return lambda xi: float(h.subs([(x, xi)]))
-
-    def cache_module_id(self, module_id, permissible_error_rate, permissible_size):
-        key = (self.type_name, permissible_error_rate, permissible_size)
-        Template.deployment_cache[key] = module_id
-
-    def is_elementary(self):
-        return not self.inners

@@ -1,3 +1,4 @@
+from converter import Converter
 from util import Util
 
 import copy
@@ -15,50 +16,83 @@ class Module:
     dump_directory_path = './'
     counter = {}
     commands = {
-        'spare_optimization': './c++/bin/spare_optimization %s %f'
+        'spare_optimization': './c++/bin/spare_optimization %s %f',
+        'parallelization'   : './parallelization/bin/main %s'
     }
-    p_gate_type_x = re.compile('braiding|toffoli|mct', re.IGNORECASE)
 
     @classmethod
-    def get_id(cls, type_name):
+    def make_id(cls, type_name):
         number = cls.counter.get(type_name, 0)
         cls.counter[type_name] = number + 1
 
         return type_name.lower() + '_' + str(number)
 
     @classmethod
-    def get_file_name(cls, id):
+    def make_file_name(cls, id):
         return cls.dump_directory_path + 'module_' + id + '.json'
 
     def __init__(self, template, inners, permissible_error_rate, permissible_size):
-        self.id         = Module.get_id(template.type_name)
+        self.id         = Module.make_id(template.type_name)
         self.type_name  = template.type_name
         self.circuit    = template.circuit
         self.error_rate = template.pure_error_rate
         self.inners     = inners
 
-        self.place(permissible_error_rate, permissible_size)
-        self.parallelize()
-        self.connect()
+        self.__place(permissible_error_rate, permissible_size)
+        self.__parallelize()
+        self.__connect()
 
         # テスト用
         self.size = (10, 20, 10)
 
-    def place(self, permissible_error_rate, permissible_size):
-        self.set_spares(permissible_error_rate)
+    def dump(self, indent=4):
+        if not os.path.isdir(Module.dump_directory_path):
+            os.makedirs(Module.dump_directory_path)
 
-    def set_spares(self, permissible_error_rate):
+        file_name = Module.make_file_name(self.id)
+
+        with open(file_name, 'w') as fp:
+            json.dump(self.to_dict(), fp, indent=indent)
+            fp.flush()
+
+    def to_dict(self):
+        circuit = self.circuit
+        circuit['modules'] = [inner.to_dict() for inner in self.inners.values()]
+
+        return OrderedDict((
+            ('id'     , self.id),
+            ('size'   , self.size),
+            ('error'  , self.error_rate),
+            ('circuit', circuit)
+        ))
+
+    def to_icpm(self):
+        return OrderedDict((
+            ('format' , 'icpm'),
+            ('circuit', self.circuit)
+        ))
+
+    def to_qc(self):
+        return Converter.to_qc(self.to_icpm())
+
+    def is_elementary(self):
+        return len(self.inners) == 0
+
+    def __place(self, permissible_error_rate, permissible_size):
+        self.__set_spares(permissible_error_rate)
+
+    def __set_spares(self, permissible_error_rate):
         if self.is_elementary():
             return
 
-        spare_counts = self.optimize_spare_counts(permissible_error_rate)
+        spare_counts = self.__optimize_spare_counts(permissible_error_rate)
 
         for (spare_id, spare_count) in spare_counts.items():
             self.inners[spare_id].spare_count = spare_count
 
-        self.update_error_rate()
+        self.__update_error_rate()
 
-    def update_error_rate(self):
+    def __update_error_rate(self):
         success_rate = 1.0
 
         for inner in self.inners.values():
@@ -73,12 +107,12 @@ class Module:
 
         self.error_rate = 1.0 - success_rate
 
-    def optimize_spare_counts(self, permissible_error_rate):
-        inners_dict = self.create_spare_optimization_inners_dict()
+    def __optimize_spare_counts(self, permissible_error_rate):
+        inners_dict = self.__make_spare_optimization_inners_dict()
 
         with tempfile.NamedTemporaryFile('w') as fp:
             # 順序保持のため必要
-            ordered_inner_ids = self.write_spare_optimization_input_file(inners_dict, fp)
+            ordered_inner_ids = self.__write_spare_optimization_input_file(inners_dict, fp)
 
             cmd = Module.commands['spare_optimization'] % (fp.name, permissible_error_rate)
             process = subprocess.Popen(cmd, shell=True, \
@@ -92,14 +126,14 @@ class Module:
 
     # キーはid
     # 値は[コスト, エラー率, 個数]
-    def create_spare_optimization_inners_dict(self):
+    def __make_spare_optimization_inners_dict(self):
         return {inner_id: [
             reduce(lambda x, y: x * y, inner.size),
             inner.error_rate,
             inner.count
         ] for (inner_id, inner) in self.inners.items()}
 
-    def write_spare_optimization_input_file(self, inners_dict, fp):
+    def __write_spare_optimization_input_file(self, inners_dict, fp):
         writer = csv.writer(fp)
         ordered_inner_ids = []
 
@@ -110,24 +144,29 @@ class Module:
 
         return ordered_inner_ids
 
-    def parallelize(self):
-        qo = self.convert_to_qo()
-        file_name = './tmp/' + str(self.id) + '.qo'
-        f = open(file_name, 'w')
-        for gate in qo:
-            f.write(gate + '\n')
-        f.close()
+    def __parallelize(self):
+        with tempfile.NamedTemporaryFile('w') as fp:
+            json.dump(self.to_qc(), fp, indent=4)
+            fp.flush()
 
-        cmd = './bin/parallelize ' + file_name
+            cmd = Module.commands['parallelization'] % (fp.name)
+            process = subprocess.Popen(cmd, shell=True, \
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            process.wait()
+            stdout = process.communicate()[0]
+
+        icpm = Converter.to_icpm(json.loads(stdout.decode('utf-8')))
+        self.circuit['operations'] = icpm.get('circuit', {}).get('operations', [])
+
         #subprocess.check_call(cmd, shell=True, stdout=devnull)
         #f = open('./tmp/' + str(self.id) + '_result.qo', 'r')
         #qo = [gate for gate in f]
         #f.close()
         #self.convert_from_qo(qo)
 
-        self.set_bits()
+        #self.set_bits()
 
-    def set_bits(self):
+    def __set_bits(self):
         # テスト
         #x = self.get_time_axis_direction_length()
         x = 10
@@ -140,85 +179,6 @@ class Module:
                 #'destination': [[x, index, 0], [x, index, 1]]
             }
 
-    def connect(self):
+    def __connect(self):
         cmd = './bin/connection'
         pass
-
-    def convert_to_qo(self):
-        qo = []
-
-        for gate in self.circuit.gates:
-            gate_type = gate.get('type')
-            if Module.p_gate_type_x.match(gate_type):
-                gate_type = 'X'
-
-            bits = gate.get('bits', {})
-            cbits = [self.convert_bit_to_no(bit) for bit in bits.get('controls', [])]
-            tbits = [self.convert_bit_to_no(bit) for bit in bits.get('targets', [])]
-            cbits_str = ' '.join(map(str, cbits))
-            tbits_str = ' '.join(map(lambda no: 'T' + str(no), tbits))
-
-            qo.append(gate_type + ' \\ ' + cbits_str + ' ' + tbits_str + ' \\ \\')
-
-        return qo
-
-    def convert_from_qo(self, qo):
-        gates = []
-
-        for gate in qo:
-            tmp = list(filter(lambda e: e, re.split(r'\s|\\', gate)))
-            gate_type = tmp[0]
-            cbits = list(map(int, filter(lambda e: e[0] != 'T', tmp[1:-1])))
-            tbits = list(map(lambda e: int(e[1:]), filter(lambda e: e[0] == 'T', tmp[1:-1])))
-            step = int(tmp[-1])
-
-            if gate_type == 'X':
-                if len(cbits) == 1:
-                    gate_type = 'braiding'
-                elif len(cbits) == 2:
-                    gate_type = 'toffoli'
-                else:
-                    gate_type = 'mct'
-
-            gate = {'bits': {}}
-            gate['type'] = gate_type
-            gate['bits']['controls'] = list(map(self.convert_no_to_bit, cbits))
-            gate['bits']['targets']  = list(map(self.convert_no_to_bit, tbits))
-            gate['column'] = step * 2 - 1
-
-            gates.append(gate)
-
-        self.circuit.gates = gates
-
-    def convert_bit_to_no(self, bit):
-        if not hasattr(self, 'bit_map'):
-            self.bit_map = {bit: i for i, bit in enumerate(self.circuit.bits)}
-
-        return self.bit_map.get(bit)
-
-    def convert_no_to_bit(self, no):
-        return self.circuit.bits[no]
-
-    def get_raw(self):
-        circuit = self.circuit.to_dict()
-        circuit['modules'] = [inner.get_raw() for inner in self.inners.values()]
-
-        return OrderedDict((
-            ('id'     , self.id),
-            ('size'   , self.size),
-            ('error'  , self.error_rate),
-            ('circuit', circuit)
-        ))
-
-    def dump(self, indent=4):
-        if not os.path.isdir(Module.dump_directory_path):
-            os.makedirs(Module.dump_directory_path)
-
-        file_name = Module.get_file_name(self.id)
-
-        with open(file_name, 'w') as fp:
-            json.dump(self.get_raw(), fp, indent=indent)
-            fp.flush()
-
-    def is_elementary(self):
-        return len(self.inners) == 0

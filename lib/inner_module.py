@@ -12,18 +12,18 @@ class InnerModule:
         file_name = Module.get_file_name(id)
 
         with open(file_name, 'r') as fp:
-            raw = json.load(fp)
+            json_obj = json.load(fp)
 
         return InnerModule(
-            type('RawModule', (), {
-                'id'        : raw['id'],
-                'size'      : raw['size'],
-                'error_rate': raw['error'],
-                'circuit'   : type('RawCircuit', (), {
-                    'bits'   : raw['circuit']['bits'],
-                    'inputs' : raw['circuit']['inputs'],
-                    'outputs': raw['circuit']['outputs']
-                })
+            type('InnerModuleType', (), {
+                'id'        : json_obj['id'],
+                'size'      : json_obj['size'],
+                'error_rate': json_obj['error'],
+                'circuit'   : {
+                    'bits'   : json_obj['circuit']['bits'],
+                    'inputs' : json_obj['circuit']['inputs'],
+                    'outputs': json_obj['circuit']['outputs']
+                }
             })
         )
 
@@ -31,11 +31,18 @@ class InnerModule:
         self.id          = module.id
         self.size        = module.size
         self.error_rate  = module.error_rate
-        self.bits        = module.circuit.bits
-        self.inputs      = module.circuit.inputs
-        self.outputs     = module.circuit.outputs
+        self.bits        = module.circuit['bits']
+        self.inputs      = module.circuit['inputs']
+        self.outputs     = module.circuit['outputs']
         self.count       = 1
         self.spare_count = 0
+
+    def to_dict(self):
+        return OrderedDict((
+            ('id'    , self.id),
+            ('size'  , self.size),
+            ('number', self.count + self.spare_count)
+        ))
 
     def get_input_positions(self):
         return [self.get_raw_io_format(input, 0) for input in self.inputs]
@@ -52,10 +59,3 @@ class InnerModule:
         bit_position_x = bit['range'][either]
 
         return (bit_id, [[bit_position_x, bit_id, 0], [bit_position_x, bit_id, 1]])
-
-    def get_raw(self):
-        return OrderedDict((
-            ('id'    , self.id),
-            ('size'  , self.size),
-            ('number', self.count + self.spare_count)
-        ))

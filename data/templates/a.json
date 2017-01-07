@@ -1,6 +1,6 @@
 {
     "error" : 0.1,
-    "elements": {
+    "circuit": {
         "outputs": [
             {
                 "id": 0,
