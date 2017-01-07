@@ -33,7 +33,7 @@ class Module:
     def __init__(self, template, inners, permissible_error_rate, permissible_size):
         self.id         = Module.get_id(template.type_name)
         self.type_name  = template.type_name
-        self.elements   = template.elements
+        self.circuit    = template.circuit
         self.error_rate = template.pure_error_rate
         self.inners     = inners
 
@@ -132,8 +132,8 @@ class Module:
         #x = self.get_time_axis_direction_length()
         x = 10
 
-        for (index, bit) in enumerate(self.elements.bits):
-            self.elements.bits[index] = {
+        for (index, bit) in enumerate(self.circuit.bits):
+            self.circuit.bits[index] = {
                 'id'   : index,
                 'range': [0, x]
                 #'source'     : [[0, index, 0], [0, index, 1]],
@@ -147,12 +147,12 @@ class Module:
     def convert_to_qo(self):
         qo = []
 
-        for operation in self.elements.operations:
-            gate_type = operation.get('type')
+        for gate in self.circuit.gates:
+            gate_type = gate.get('type')
             if Module.p_gate_type_x.match(gate_type):
                 gate_type = 'X'
 
-            bits = operation.get('bits', {})
+            bits = gate.get('bits', {})
             cbits = [self.convert_bit_to_no(bit) for bit in bits.get('controls', [])]
             tbits = [self.convert_bit_to_no(bit) for bit in bits.get('targets', [])]
             cbits_str = ' '.join(map(str, cbits))
@@ -163,7 +163,7 @@ class Module:
         return qo
 
     def convert_from_qo(self, qo):
-        operations = []
+        gates = []
 
         for gate in qo:
             tmp = list(filter(lambda e: e, re.split(r'\s|\\', gate)))
@@ -180,34 +180,34 @@ class Module:
                 else:
                     gate_type = 'mct'
 
-            operation = {'bits': {}}
-            operation['type'] = gate_type
-            operation['bits']['controls'] = list(map(self.convert_no_to_bit, cbits))
-            operation['bits']['targets']  = list(map(self.convert_no_to_bit, tbits))
-            operation['column'] = step * 2 - 1
+            gate = {'bits': {}}
+            gate['type'] = gate_type
+            gate['bits']['controls'] = list(map(self.convert_no_to_bit, cbits))
+            gate['bits']['targets']  = list(map(self.convert_no_to_bit, tbits))
+            gate['column'] = step * 2 - 1
 
-            operations.append(operation)
+            gates.append(gate)
 
-        self.elements.operations = operations
+        self.circuit.gates = gates
 
     def convert_bit_to_no(self, bit):
         if not hasattr(self, 'bit_map'):
-            self.bit_map = {bit: i for i, bit in enumerate(self.elements.bits)}
+            self.bit_map = {bit: i for i, bit in enumerate(self.circuit.bits)}
 
         return self.bit_map.get(bit)
 
     def convert_no_to_bit(self, no):
-        return self.elements.bits[no]
+        return self.circuit.bits[no]
 
     def get_raw(self):
-        elements = self.elements.to_dict()
-        elements['modules'] = [inner.get_raw() for inner in self.inners.values()]
+        circuit = self.circuit.to_dict()
+        circuit['modules'] = [inner.get_raw() for inner in self.inners.values()]
 
         return OrderedDict((
-            ('id'      , self.id),
-            ('size'    , self.size),
-            ('error'   , self.error_rate),
-            ('elements', elements)
+            ('id'     , self.id),
+            ('size'   , self.size),
+            ('error'  , self.error_rate),
+            ('circuit', circuit)
         ))
 
     def dump(self, indent=4):

@@ -1,108 +1,85 @@
 {
-    "elements": {
+    "format": "icpm",
+    "circuit": {
         "bits"   : [0, 1, 2, 3, 4, 5],
         "inputs" : [0],
         "outputs": [5],
         "initializations": [
             {
-                "bit" : 1,
-                "type": "A"
+                "bit"   : 1,
+                "type"  : "pin",
+                "module": "a"
             },
             {
-                "bit" : 2,
-                "type": "Z"
+                "bit"   : 2,
+                "type"  : "z"
             },
             {
-                "bit" : 3,
-                "type": "Y"
+                "bit"   : 3,
+                "type"  : "pin",
+                "module": "y"
             },
             {
-                "bit" : 4,
-                "type": "X"
+                "bit"   : 4,
+                "type"  : "x"
             },
             {
-                "bit" : 5,
-                "type": "Z"
+                "bit"   : 5,
+                "type"  : "z"
             }
         ],
         "measurements": [
             {
-                "bit"  : 0,
-                "basis": "Z"
+                "bit" : 0,
+                "type": "z"
             },
             {
-                "bit"   : 1,
-                "basis" : ["Z", "X"],
-                "depend": 0
+                "bit" : 1,
+                "type": "z/x"
             },
             {
-                "bit"   : 2,
-                "basis" : ["X", "Z"],
-                "depend": 0
+                "bit" : 2,
+                "type": "x/z"
             },
             {
-                "bit"   : 3,
-                "basis" : ["X", "Z"],
-                "depend": 0
+                "bit" : 3,
+                "type": "x/z"
             },
             {
-                "bit"   : 3,
-                "basis" : ["Z", "X"],
-                "depend": 0
+                "bit" : 4,
+                "type": "z/x"
             }
         ],
         "operations": [
             {
-                "type": "braiding",
-                "bits": {
-                    "controls": [1],
-                    "targets" : [0]
-                }
+                "type"    : "cnot",
+                "controls": [1],
+                "targets" : [0]
             },
             {
-                "type": "braiding",
-                "bits": {
-                    "controls": [1],
-                    "targets" : [2]
-                }
+                "type"    : "cnot",
+                "controls": [1],
+                "targets" : [2]
             },
             {
-                "type": "braiding",
-                "bits": {
-                    "controls": [3],
-                    "targets" : [1]
-                }
+                "type"    : "cnot",
+                "controls": [3],
+                "targets" : [1]
             },
             {
-                "type": "braiding",
-                "bits": {
-                    "controls": [4],
-                    "targets" : [3]
-                }
+                "type"    : "cnot",
+                "controls": [4],
+                "targets" : [3]
             },
             {
-                "type": "braiding",
-                "bits": {
-                    "controls": [3],
-                    "targets" : [5]
-                }
+                "type"    : "cnot",
+                "controls": [3],
+                "targets" : [5]
             },
             {
-                "type": "braiding",
-                "bits": {
-                    "controls": [4],
-                    "targets" : [5]
-                }
-            }
-        ],
-        "templates": [
-            {
-                "type"  : "Y",
-                "number": 1
-            },
-            {
-                "type"  : "A",
-                "number": 1
+                "type"    : "cnot",
+                "controls": [4],
+                "targets" : [5]
             }
         ]
     }

@@ -19,10 +19,10 @@ class InnerModule:
                 'id'        : raw['id'],
                 'size'      : raw['size'],
                 'error_rate': raw['error'],
-                'elements'  : type('RawElements', (), {
-                    'bits'   : raw['elements']['bits'],
-                    'inputs' : raw['elements']['inputs'],
-                    'outputs': raw['elements']['outputs']
+                'circuit'   : type('RawCircuit', (), {
+                    'bits'   : raw['circuit']['bits'],
+                    'inputs' : raw['circuit']['inputs'],
+                    'outputs': raw['circuit']['outputs']
                 })
             })
         )
@@ -31,9 +31,9 @@ class InnerModule:
         self.id          = module.id
         self.size        = module.size
         self.error_rate  = module.error_rate
-        self.bits        = module.elements.bits
-        self.inputs      = module.elements.inputs
-        self.outputs     = module.elements.outputs
+        self.bits        = module.circuit.bits
+        self.inputs      = module.circuit.inputs
+        self.outputs     = module.circuit.outputs
         self.count       = 1
         self.spare_count = 0
 

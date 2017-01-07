@@ -1,4 +1,4 @@
-from elements import Elements
+from circuit import Circuit
 from inner_module import InnerModule
 from module import Module
 from util import Util
@@ -6,6 +6,7 @@ from util import Util
 import json
 import sympy
 
+from collections import defaultdict
 from functools import reduce
 
 class Template:
@@ -49,10 +50,27 @@ class Template:
 
         self.type_name = type_name
         self.pure_error_rate = raw.get('error', 0.0)
-        self.elements = Elements(raw.get('elements', {}))
+        self.circuit = Circuit(raw.get('circuit', {}))
         self.inners = []
 
-        self.set_inners(raw.get('elements', {}).get('templates', []))
+        self.set_inners(self.make_raw_inners())
+
+    def make_raw_inners(self):
+        initializations = self.circuit.initializations
+        gates = self.circuit.gates
+
+        inners = defaultdict(int)
+
+        for initialization in initializations:
+            if initialization.type != 'x' or initialization.type != '-x' or\
+               initialization.type != 'z' or initialization.type != '-z':
+                inners[initialization.type] += 1
+
+        for gate in gates:
+            if gate.type != 'cnot':
+                inners[gate.type] += 1
+
+        return [{'type': key, 'number', value} for key, value in inners.items()]
 
     def set_inners(self, raw_inners):
         pure_success_rate = 1.0 - self.pure_error_rate
