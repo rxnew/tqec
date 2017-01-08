@@ -22,33 +22,43 @@ auto IO::output(Rectangular const& rectangular, int indent_count,
      << std::endl;
 
   os << indent2
-     << "\"size\": "
+     << "\"size\": ["
      << rectangular.w
      << ", "
      << rectangular.h
      << ", "
      << rectangular.d
-     << "],"
+     << ']'
      << std::endl;
 
   os << indent1 << '}';
 }
 
 auto IO::output(Rectangulars const& rectangulars, std::ostream& os) -> void {
-  os << "\"modules\": [" << std::endl;
+  auto indent = std::string(4, ' ');
+
+  os << '{' << std::endl;
+
+  os << indent
+     << "\"modules\": ["
+     << std::endl;
 
   {
     auto first = true;
     for(const auto& rectangular : rectangulars) {
       if(!first) os << ',' << std::endl;
       else       first = false;
-      output(*rectangular, 1, os);
+      output(*rectangular, 2, os);
     }
   }
 
   os << std::endl;
 
-  os << ']' << std::endl;
+  os << indent
+     << ']'
+     << std::endl;
+
+  os << '}' << std::endl;
 }
 }
 }

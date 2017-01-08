@@ -17,6 +17,7 @@ class Module:
     counter = {}
     commands = {
         'spare_optimization': './c++/bin/spare_optimization %s %f',
+        'inners_placement'  : './c++/bin/module_placement %s',
         'parallelization'   : './parallelization/bin/main %s'
     }
 
@@ -80,6 +81,44 @@ class Module:
 
     def __place(self, permissible_error_rate, permissible_size):
         self.__set_spares(permissible_error_rate)
+        self.__place_inners(permissible_size)
+
+    def __place_inners(self, permissible_size):
+        if self.is_elementary():
+            return
+
+        inners_dict = self.inners
+
+        with tempfile.NamedTemporaryFile('w') as fp:
+            # 順序保持のため必要
+            ordered_inner_ids \
+                = self.__write_inners_placement_input_file(permissible_size, inners_dict, fp)
+
+            cmd = Module.commands['inners_placement'] % (fp.name)
+            process = subprocess.Popen(cmd, shell=True, \
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            process.wait()
+            stdout = process.communicate()[0]
+
+        inner_places = json.loads(stdout.decode('utf-8'))['modules']
+
+        for (id, inner) in zip(ordered_inner_ids, inner_places):
+            self.inners[id].position = inner['position']
+
+    def __write_inners_placement_input_file(self, permissible_size, inners_dict, fp):
+        writer = csv.writer(fp)
+        ordered_inner_ids = []
+        surface_size = list(permissible_size) + [0]
+        surface_position = [0, 0, 0]
+
+        writer.writerow(surface_size + surface_position)
+
+        for (inner_id, inner) in inners_dict.items():
+            writer.writerow(inner.size)
+            ordered_inner_ids.append(inner_id)
+        fp.flush()
+
+        return ordered_inner_ids
 
     def __set_spares(self, permissible_error_rate):
         if self.is_elementary():
@@ -157,12 +196,6 @@ class Module:
 
         icpm = Converter.to_icpm(json.loads(stdout.decode('utf-8')))
         self.circuit['operations'] = icpm.get('circuit', {}).get('operations', [])
-
-        #subprocess.check_call(cmd, shell=True, stdout=devnull)
-        #f = open('./tmp/' + str(self.id) + '_result.qo', 'r')
-        #qo = [gate for gate in f]
-        #f.close()
-        #self.convert_from_qo(qo)
 
         #self.set_bits()
 

@@ -7,7 +7,7 @@ from util import Util
 import json
 import sympy
 
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from functools import reduce
 
 class Template:
@@ -36,7 +36,7 @@ class Template:
             #cls.decompose()
             pass
 
-        json_obj = Completion.icpm(json.load(fp))
+        json_obj = Completion.icpm(json.load(fp, object_pairs_hook=OrderedDict))
         fp.close()
 
         return json_obj
@@ -85,7 +85,7 @@ class Template:
                 if element['type'] == 'pin':
                     inners[element['module']] += 1
 
-        return [{'type': key, 'number': value} for key, value in inners.items()]
+        return [{'type': key, 'number': value} for (key, value) in inners.items()]
 
     def __set_inners(self, inners):
         pure_success_rate = 1.0 - self.pure_error_rate

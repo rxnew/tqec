@@ -30,6 +30,7 @@ class InnerModule:
     def __init__(self, module):
         self.id          = module.id
         self.size        = module.size
+        self.position    = None
         self.error_rate  = module.error_rate
         self.bits        = module.circuit['bits']
         self.inputs      = module.circuit['inputs']
@@ -39,9 +40,10 @@ class InnerModule:
 
     def to_dict(self):
         return OrderedDict((
-            ('id'    , self.id),
-            ('size'  , self.size),
-            ('number', self.count + self.spare_count)
+            ('id'      , self.id),
+            ('size'    , self.size),
+            ('position', self.position),
+            ('number'  , self.count + self.spare_count)
         ))
 
     def get_input_positions(self):
