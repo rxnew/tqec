@@ -110,7 +110,7 @@ class Template:
         return inner_module
 
     def __deploy_inners(self, permissible_error_rate, permissible_size):
-        inner_modules = {}
+        inner_modules = OrderedDict()
 
         if self.is_elementary():
             return inner_modules

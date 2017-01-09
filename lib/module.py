@@ -17,8 +17,8 @@ class Module:
     counter = {}
     commands = {
         'spare_optimization': './c++/bin/spare_optimization %s %f',
-        'inners_placement'  : './c++/bin/module_placement %s',
-        'parallelization'   : './parallelization/bin/main %s'
+        'inners_placement'  : './optimizations/module_placement/bin/spp3 %s',
+        'parallelization'   : './optimizations/algorithmic_circuit_steps/bin/main %s'
     }
 
     @classmethod
@@ -87,12 +87,8 @@ class Module:
         if self.is_elementary():
             return
 
-        inners_dict = self.inners
-
         with tempfile.NamedTemporaryFile('w') as fp:
-            # 順序保持のため必要
-            ordered_inner_ids \
-                = self.__write_inners_placement_input_file(permissible_size, inners_dict, fp)
+            self.__write_inners_placement_input_file(permissible_size, fp)
 
             cmd = Module.commands['inners_placement'] % (fp.name)
             process = subprocess.Popen(cmd, shell=True, \
@@ -100,25 +96,23 @@ class Module:
             process.wait()
             stdout = process.communicate()[0]
 
-        inner_places = json.loads(stdout.decode('utf-8'))['modules']
+        placed_inners = json.loads(stdout.decode('utf-8'))['hyperrectangles']
 
-        for (id, inner) in zip(ordered_inner_ids, inner_places):
-            self.inners[id].position = inner['position']
+        for (inner, placed_inner) in zip(self.inners.values(), placed_inners):
+            inner.position = placed_inner['position']
 
-    def __write_inners_placement_input_file(self, permissible_size, inners_dict, fp):
+    def __write_inners_placement_input_file(self, permissible_size, fp):
         writer = csv.writer(fp)
         ordered_inner_ids = []
-        surface_size = list(permissible_size) + [0]
-        surface_position = [0, 0, 0]
+        base_size = list(permissible_size) + [0]
+        base_position = [0, 0, 0]
 
-        writer.writerow(surface_size + surface_position)
+        json.dump({
+            'hyperrectangles': [{'size': inner.size} for inner in self.inners.values()],
+            'base'           : {'size': base_size, 'position': base_position}
+        }, fp)
 
-        for (inner_id, inner) in inners_dict.items():
-            writer.writerow(inner.size)
-            ordered_inner_ids.append(inner_id)
         fp.flush()
-
-        return ordered_inner_ids
 
     def __set_spares(self, permissible_error_rate):
         if self.is_elementary():
@@ -185,7 +179,7 @@ class Module:
 
     def __parallelize(self):
         with tempfile.NamedTemporaryFile('w') as fp:
-            json.dump(self.to_qc(), fp, indent=4)
+            json.dump(self.to_qc(), fp)
             fp.flush()
 
             cmd = Module.commands['parallelization'] % (fp.name)
