@@ -1,4 +1,3 @@
-from circuit import Circuit
 from inner_module import InnerModule
 from module import Module
 from completion import Completion

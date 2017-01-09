@@ -1,0 +1,37 @@
+cmake_minimum_required(VERSION 3.2)
+
+set(SPP_INCLUDE_PATHS ${SPP_INCLUDE_PATHS}
+    /lib/include
+    /lib/local/include)
+
+set(SPP_LIBRARY_PATHS ${SPP_LIBRARY_PATHS}
+    /usr/lib
+    /usr/local/lib)
+
+if(INSTALL_EXTERNAL_PROJECTS_PREFIX)
+  set(SPP_INCLUDE_PATHS ${SPP_INCLUDE_PATHS}
+      ${INSTALL_EXTERNAL_PROJECTS_PREFIX}/include)
+
+  set(SPP_LIBRARY_PATHS ${SPP_LIBRARY_PATHS}
+      ${INSTALL_EXTERNAL_PROJECTS_PREFIX}/lib)
+endif()
+
+if(EXTERNAL_PROJECTS_PATHS)
+  set(SPP_INCLUDE_PATHS ${SPP_INCLUDE_PATHS}
+      ${EXTERNAL_PROJECTS_PATHS}/include)
+
+  set(SPP_LIBRARY_PATHS ${SPP_LIBRARY_PATHS}
+      ${EXTERNAL_PROJECTS_PATHS}/lib)
+endif()
+
+find_path(SPP_INCLUDE_PATH
+          NAMES spp
+          PATHS ${SPP_INCLUDE_PATHS})
+
+find_library(SPP_LIBRARY
+             NAMES spp
+             PATHS ${SPP_LIBRARY_PATHS})
+
+if(NOT SPP_INCLUDE_PATH OR NOT SPP_LIBRARY)
+  include(${CMAKE_CURRENT_LIST_DIR}/spp.cmake)
+endif()
