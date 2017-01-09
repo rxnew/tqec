@@ -32,15 +32,26 @@ class Module:
     def make_file_name(cls, id):
         return cls.dump_directory_path + 'module_' + id + '.json'
 
+    @classmethod
+    def __exec_subproccess(cls, command_key, file_name):
+        command = Module.commands[command_key] % (file_name)
+        process = subprocess.Popen(command, shell=True, \
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        process.wait()
+        stdout = process.communicate()[0]
+        return stdout.decode('utf-8')
+
     def __init__(self, template, inners, permissible_error_rate, permissible_size):
-        self.id         = Module.make_id(template.type_name)
+        self.id         = self.make_id(template.type_name)
         self.type_name  = template.type_name
         self.circuit    = template.circuit
         self.error_rate = template.pure_error_rate
         self.inners     = inners
 
-        self.__place(permissible_error_rate, permissible_size)
+        self.__prepare()
+
         self.__parallelize()
+        self.__place(permissible_error_rate, permissible_size)
         self.__connect()
 
         # テスト用
@@ -53,19 +64,24 @@ class Module:
         file_name = Module.make_file_name(self.id)
 
         with open(file_name, 'w') as fp:
-            json.dump(self.to_dict(), fp, indent=indent)
+            json.dump(self.to_output_format(), fp, indent=indent)
             fp.flush()
 
-    def to_dict(self):
-        circuit = self.circuit
-        circuit['modules'] = [inner.to_dict() for inner in self.inners.values()]
-
+    def to_output_format(self):
         return OrderedDict((
             ('id'     , self.id),
+            ('type'   , self.type_name),
             ('size'   , self.size),
             ('error'  , self.error_rate),
-            ('circuit', circuit)
+            ('circuit', self.circuit),
+            ('modules', self.to_output_format_inners())
         ))
+
+    def to_output_format_inners(self):
+        output_format = []
+        for inner in self.inners:
+            output_format.extend(inner.to_output_format())
+        return output_format
 
     def to_icpm(self):
         return OrderedDict((
@@ -76,8 +92,29 @@ class Module:
     def to_qc(self):
         return Converter.to_qc(self.to_icpm())
 
+    def get_inner(self, inner_id):
+        return self.inners[self.__inner_id_dict[inner_id]]
+
     def is_elementary(self):
         return len(self.inners) == 0
+
+    def __prepare(self):
+        self.__set_inners_id_dict()
+        self.__set_id_of_pins()
+
+    def __set_inners_id_dict(self):
+        self.__inner_id_dict = {inner.id: i for i, inner in enumerate(self.inners)}
+
+    # 同一テンプレートから違うモジュールを生成しない場合
+    def __set_id_of_pins(self):
+        inner_type_dict = {inner.type_name: inner.id for inner in self.inners}
+
+        for key in ['initializations', 'operations']:
+            for i in range(len(self.circuit[key])):
+                element = self.circuit[key][i]
+                if element['type'] != 'pin': continue
+                type_name = element['module']
+                self.circuit[key][i]['module'] = inner_type_dict[type_name]
 
     def __place(self, permissible_error_rate, permissible_size):
         self.__set_spares(permissible_error_rate)
@@ -87,32 +124,42 @@ class Module:
         if self.is_elementary():
             return
 
+        hyperrectangles, inner_ids = self.__make_placement_hyperrectangles()
+        base = self.__make_placement_base(permissible_size)
+
         with tempfile.NamedTemporaryFile('w') as fp:
-            self.__write_inners_placement_input_file(permissible_size, fp)
+            json.dump({
+                'hyperrectangles': hyperrectangles,
+                'base'           : base
+            }, fp)
 
-            cmd = Module.commands['inners_placement'] % (fp.name)
-            process = subprocess.Popen(cmd, shell=True, \
-                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            process.wait()
-            stdout = process.communicate()[0]
+            fp.flush()
+            result = self.__exec_subproccess('inners_placement', fp.name)
 
-        placed_inners = json.loads(stdout.decode('utf-8'))['hyperrectangles']
+        hyperrectangles = json.loads(result)['hyperrectangles']
+        self.__set_inners_positions(hyperrectangles, inner_ids)
 
-        for (inner, placed_inner) in zip(self.inners.values(), placed_inners):
-            inner.position = placed_inner['position']
+    def __make_placement_hyperrectangles(self):
+        hyperrectangles = []
+        inner_ids = []
 
-    def __write_inners_placement_input_file(self, permissible_size, fp):
-        writer = csv.writer(fp)
-        ordered_inner_ids = []
+        for inner in self.inners:
+            hyperrectangle = {"size": inner.size}
+            for i in range(inner.count + inner.spare_count):
+                hyperrectangles.append(hyperrectangle)
+                inner_ids.append(inner.id)
+
+        return (hyperrectangles, inner_ids)
+
+    def __make_placement_base(self, permissible_size):
         base_size = list(permissible_size) + [0]
         base_position = [0, 0, 0]
 
-        json.dump({
-            'hyperrectangles': [{'size': inner.size} for inner in self.inners.values()],
-            'base'           : {'size': base_size, 'position': base_position}
-        }, fp)
+        return {'size': base_size, 'position': base_position}
 
-        fp.flush()
+    def __set_inners_positions(self, hyperrectangles, inner_ids):
+        for (hyperrectangle, id) in zip(hyperrectangles, inner_ids):
+            self.get_inner(id).positions.append(hyperrectangle['position'])
 
     def __set_spares(self, permissible_error_rate):
         if self.is_elementary():
@@ -121,14 +168,14 @@ class Module:
         spare_counts = self.__optimize_spare_counts(permissible_error_rate)
 
         for (spare_id, spare_count) in spare_counts.items():
-            self.inners[spare_id].spare_count = spare_count
+            self.get_inner(spare_id).spare_count = spare_count
 
         self.__update_error_rate()
 
     def __update_error_rate(self):
         success_rate = 1.0
 
-        for inner in self.inners.values():
+        for inner in self.inners:
             inner_success_rate = 0.0
 
             (e, n, x) = (inner.error_rate, inner.count, inner.spare_count)
@@ -160,11 +207,11 @@ class Module:
     # キーはid
     # 値は[コスト, エラー率, 個数]
     def __make_spare_optimization_inners_dict(self):
-        return {inner_id: [
+        return {inner.id: [
             reduce(lambda x, y: x * y, inner.size),
             inner.error_rate,
             inner.count
-        ] for (inner_id, inner) in self.inners.items()}
+        ] for inner in self.inners}
 
     def __write_spare_optimization_input_file(self, inners_dict, fp):
         writer = csv.writer(fp)

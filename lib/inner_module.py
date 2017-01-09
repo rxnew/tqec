@@ -12,39 +12,43 @@ class InnerModule:
         file_name = Module.get_file_name(id)
 
         with open(file_name, 'r') as fp:
-            json_obj = json.load(fp)
+            json_object = json.load(fp)
 
         return InnerModule(
             type('InnerModuleType', (), {
-                'id'        : json_obj['id'],
-                'size'      : json_obj['size'],
-                'error_rate': json_obj['error'],
+                'id'        : json_object['id'],
+                'type_name' : json_object['type'],
+                'size'      : json_object['size'],
+                'error_rate': json_object['error'],
                 'circuit'   : {
-                    'bits'   : json_obj['circuit']['bits'],
-                    'inputs' : json_obj['circuit']['inputs'],
-                    'outputs': json_obj['circuit']['outputs']
+                    'inputs' : json_object['circuit']['inputs'],
+                    'outputs': json_object['circuit']['outputs']
                 }
             })
         )
 
     def __init__(self, module):
         self.id          = module.id
+        self.type_name   = module.type_name
         self.size        = module.size
-        self.position    = None
         self.error_rate  = module.error_rate
-        self.bits        = module.circuit['bits']
-        self.inputs      = module.circuit['inputs']
-        self.outputs     = module.circuit['outputs']
+        self.circuit     = {
+            'inputs':  module.circuit['inputs'],
+            'outputs': module.circuit['outputs']
+        }
         self.count       = 1
         self.spare_count = 0
+        self.positions   = []
 
-    def to_dict(self):
-        return OrderedDict((
-            ('id'      , self.id),
-            ('size'    , self.size),
-            ('position', self.position),
-            ('number'  , self.count + self.spare_count)
-        ))
+    def to_output_format(self):
+        return [
+            OrderedDict((
+                ('id'      , self.id),
+                ('size'    , self.size),
+                ('position', position)
+            ))
+            for position in self.positions
+        ]
 
     def get_input_positions(self):
         return [self.get_raw_io_format(input, 0) for input in self.inputs]
