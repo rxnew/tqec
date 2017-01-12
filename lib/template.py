@@ -1,6 +1,6 @@
 from inner_module import InnerModule
 from module import Module
-from completion import Completion
+from converter import Converter
 from util import Util
 
 import json
@@ -35,10 +35,11 @@ class Template:
             #cls.decompose()
             pass
 
-        json_obj = Completion.icpm(json.load(fp, object_pairs_hook=OrderedDict))
+        json_object = json.load(fp, object_pairs_hook=OrderedDict)
+        Converter.complement_icpm(json_object)
         fp.close()
 
-        return json_obj
+        return json_object
 
     def __new__(cls, type_name):
         if not type_name:
@@ -109,7 +110,7 @@ class Template:
 
         return inner_module
 
-    # 同一テンプレートから違うモジュールを生成しない場合
+    # 同一テンプレートから異なるモジュールを生成しない場合
     def __deploy_inners(self, permissible_error_rate, permissible_size):
         if self.is_elementary():
             return []
@@ -130,7 +131,7 @@ class Template:
 
         return inner_modules
 
-    # 同一テンプレートから違うモジュールを生成する可能性がある場合 (現在不使用)
+    # 同一テンプレートから異なるモジュールを生成する可能性がある場合 (現在不使用)
     def __deploy_inners_not_used(self, permissible_error_rate, permissible_size):
         if self.is_elementary():
             return []
@@ -166,8 +167,8 @@ class Template:
                 return (inner.pure_error_rate, permissible_size)
 
             inner_permissible_error_rate = error_rate_func(inner.pure_error_rate)
-            # テスト
-            inner_permissible_size = permissible_size
+            # Y軸方向はアルゴリズミック回路の分だけ引く
+            inner_permissible_size = (permissible_size[0], permissible_size[1] - 4)
 
             return (inner_permissible_error_rate, inner_permissible_size)
 
