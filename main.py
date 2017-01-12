@@ -12,7 +12,7 @@ def main(argv):
     Module.dump_directory_path = './results/' + type_name.lower() + '/'
 
     template = Template(type_name)
-    template.deploy(0.001, (20, 49))
+    template.deploy(0.001, (30, 49))
 
 if __name__ == '__main__':
     main(sys.argv)

@@ -40,6 +40,24 @@ class InnerModule:
         self.spare_count = 0
         self.positions   = []
 
+    def __len__(self):
+        return len(self.__dict__)
+
+    def __repr__(self):
+        return str(self.__dict__)
+
+    def __str__(self):
+        return str(self.__dict__)
+
+    def __iter__(self):
+        return self.__dict__.iteritems()
+
+    def __getitem__(self, key):
+        return self.__dict__[key]
+
+    def __setitem__(self, key, value):
+        self.__dict__[key] = value
+
     def to_output_format(self):
         return [
             OrderedDict((

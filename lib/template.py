@@ -47,12 +47,13 @@ class Template:
         return super().__new__(cls)
 
     def __init__(self, type_name):
-        json_obj = Template.__load(type_name)
+        json_object = Template.__load(type_name)
 
-        self.type_name = type_name
-        self.pure_error_rate = json_obj.get('error', 0.0)
-        self.circuit = json_obj.get('circuit', {})
-        self.inners = [] # (inner, count)
+        self.type_name       = type_name
+        self.pure_error_rate = json_object.get('error', 0.0)
+        self.size            = json_object.get('size')
+        self.circuit         = json_object.get('circuit', {})
+        self.inners          = [] # (inner, count)
 
         self.__set_inners(self.__collect_inners())
 

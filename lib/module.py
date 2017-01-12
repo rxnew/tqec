@@ -7,6 +7,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 
 from collections import OrderedDict
@@ -46,6 +47,7 @@ class Module:
         self.type_name  = template.type_name
         self.circuit    = template.circuit
         self.error_rate = template.pure_error_rate
+        self.size       = template.size # 後に更新 (elementary module用)
         self.inners     = inners
 
         self.__prepare()
@@ -55,7 +57,7 @@ class Module:
         self.__connect()
 
         # テスト用
-        self.size = (10, 20, 10)
+        self.__set_size()
 
     def dump(self, indent=4):
         if not os.path.isdir(Module.dump_directory_path):
@@ -101,6 +103,7 @@ class Module:
     def __prepare(self):
         self.__set_inners_id_dict()
         self.__set_id_of_pins()
+        self.__set_algorithmic_circuit_size()
 
     def __set_inners_id_dict(self):
         self.__inner_id_dict = {inner.id: i for i, inner in enumerate(self.inners)}
@@ -116,6 +119,57 @@ class Module:
                 type_name = element['module']
                 self.circuit[key][i]['module'] = inner_type_dict[type_name]
 
+    def __set_algorithmic_circuit_size(self):
+        # i番目のビット線の座標は [(i + 1) * 2, 0, 0] (i >= 0)
+        w = (len(self.circuit['bits']) + 1) << 1
+        d = self.__calculate_algorithmic_circuit_length()
+        self.__algorithmic_circuit_size = [w, 4, d]
+
+    def __calculate_algorithmic_circuit_length(self):
+        circuit_length = 0
+
+        for operation_step in self.circuit['operations']:
+            if not isinstance(operation_step, list):
+                operation_step = [operation_step]
+
+            step_length = 0
+
+            for operation in operation_step:
+                operation_type = operation['type'].lower()
+
+                if operation_type == 'cnot':
+                    step_length = 4 # 2 * 2
+                elif operation_type == 'pin':
+                    step_length = 6
+
+            circuit_length += step_length
+
+        return circuit_length
+
+    # TODO: connectionを考慮
+    def __set_size(self):
+        if self.is_elementary():
+            return
+
+        algorithmic_circuit = {
+            'size'    : self.__algorithmic_circuit_size,
+            'position': [0, 0, 0]
+        }
+        hyperrectangles = self.to_output_format_inners() + [algorithmic_circuit]
+        convex_hull = self.__calculate_convex_hull(hyperrectangles)
+        self.size = convex_hull['size']
+        self.__update_positions(convex_hull['position'])
+
+    def __update_positions(self, base_position):
+        self.__update_inners_position(base_position)
+        #self.__update_connections_position(base_position)
+
+    def __update_inners_position(self, base_position):
+        for i, inner in enumerate(self.inners):
+            for j in range(len(inner.positions)):
+                for k in range(3):
+                    self.inners[i].positions[j][k] += base_position[k]
+
     def __place(self, permissible_error_rate, permissible_size):
         self.__set_spares(permissible_error_rate)
         self.__place_inners(permissible_size)
@@ -124,24 +178,21 @@ class Module:
         if self.is_elementary():
             return
 
-        algorithmic_circuit_size = self.__calculate_algorithmic_circuit_size()
-        max_inner_size           = self.__max_inner_size()
-
+        max_inner_size = self.__max_inner_size()
         hyperrectangles, inner_ids = self.__make_placement_hyperrectangles()
 
         # Y軸方向のストリップパッキング
-        base = self.__make_placement_base_y(algorithmic_circuit_size, max_inner_size),
+        base = self.__make_placement_base_y(max_inner_size)
         hyperrectangles = self.__place_hyperrectangles(hyperrectangles, base)
 
         if not self.__is_within_permissible_size(hyperrectangles, permissible_size):
             # Z軸方向のストリップパッキング
-            base = self.__make_placement_base_z(algorithmic_circuit_size, max_inner_size,
-                                                permissible_size)
+            base = self.__make_placement_base_z(max_inner_size, permissible_size)
             hyperrectangles = self.__place_hyperrectangles(hyperrectangles, base)
 
         self.__set_inners_positions(hyperrectangles, inner_ids)
 
-    def __place_hyperrectangles(self, hyperrectangle, base):
+    def __place_hyperrectangles(self, hyperrectangles, base):
         with tempfile.NamedTemporaryFile('w') as fp:
             json.dump({
                 'hyperrectangles': hyperrectangles,
@@ -158,7 +209,6 @@ class Module:
 
         if convex_hull['size'][0] > permissible_size[0]    : return False
         if convex_hull['size'][1] > permissible_size[1] - 4: return False
-        if convex_hull['size'][2] > permissible_size[2]    : return False
 
         return True
 
@@ -191,17 +241,16 @@ class Module:
 
         return (hyperrectangles, inner_ids)
 
-    def __make_placement_base_y(self, algorithmic_circuit_size, max_inner_size):
-        x = max(algorithmic_circuit_size[0], max_inner_size[0])
-        z = max(algorithmic_circuit_size[2], max_inner_size[2])
+    def __make_placement_base_y(self, max_inner_size):
+        x = max(self.__algorithmic_circuit_size[0], max_inner_size[0])
+        z = max(self.__algorithmic_circuit_size[2], max_inner_size[2])
         base_size = [x, 0, z]
         base_position = [0, 4, 0]
 
         return {'size': base_size, 'position': base_position}
 
-    def __make_placement_base_z(self, algorithmic_circuit_size, max_inner_size,
-                                permissible_size):
-        x = max(algorithmic_circuit_size[0], max_inner_size[0])
+    def __make_placement_base_z(self, max_inner_size, permissible_size):
+        x = max(self.__algorithmic_circuit_size[0], max_inner_size[0])
         y = permissible_size[1] - 4
         base_size = [x, y, 0]
         base_position = [0, 4, 0]
@@ -215,33 +264,6 @@ class Module:
                 max_inner_size[i] = max(max_inner_size[i], inner.size[i])
 
         return max_inner_size
-
-    def __calculate_algorithmic_circuit_size(self):
-        w = (len(self.circuit['bits']) + 1) << 1
-        d = __calculate_algorithmic_circuit_length()
-
-        return [w, 4, d]
-
-    def __calculate_algorithmic_circuit_length(self):
-        circuit_length = 0
-
-        for operation_step in self.circuit['operations']:
-            if not isinstance(operation_step, list):
-                operation_step = [operation_step]
-
-            step_length = 0
-
-            for operation in operation_step:
-                operation_type = operation['type'].lower()
-
-                if operation_type == 'cnot':
-                    step_length = 4 # 2 * 2
-                elif operation_type == 'pin':
-                    step_length = 6
-
-            circuit_length += step_length
-
-        return circuit_length
 
     def __set_inners_positions(self, hyperrectangles, inner_ids):
         for (hyperrectangle, id) in zip(hyperrectangles, inner_ids):
