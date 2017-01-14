@@ -1,6 +1,6 @@
-#include "sa.hpp"
+#include "../sa.hpp"
 
-#include "util/math.hpp"
+#include "mathutils/combinatorics.hpp"
 
 #include <cassert>
 #include <cmath>
@@ -8,18 +8,29 @@
 #include <iostream>
 
 namespace tqec {
-namespace spare {
 int SA::max_iter = 500;
 float SA::max_temperature = 100.0f;
 float SA::min_temperature = 20.0f;
 float SA::rambda = 0.9f;
 float SA::penalty = 10.0f;
 
-auto SA::_init() const -> Counts {
-  return Counts(this->modules_.size(), 0);
+auto SA::optimize(Modules const& modules,
+                  float error_rate_threshold) const -> Counts {
+  modules_ = modules;
+  error_rate_threshold_ = error_rate_threshold;
+
+  auto spare_counts = _optimize(_init());
+
+  modules_.shrink_to_fit();
+
+  return std::move(spare_counts);
 }
 
-auto SA::_generate(const Counts& counts) const -> Counts {
+auto SA::_init() const -> Counts {
+  return Counts(modules_.size(), 0);
+}
+
+auto SA::_generate(Counts const& counts) const -> Counts {
   using Uid = std::uniform_int_distribution<int>;
 
   static std::random_device random;
@@ -59,11 +70,11 @@ auto SA::_weight(float energy, bool satisfied) const -> float {
   return satisfied ? energy : max_energy;
 }
 
-auto SA::_constraints(const Counts& counts) const -> bool {
+auto SA::_constraints(Counts const& counts) const -> bool {
   auto g = [](auto e, auto n, auto x) {
     auto res = 0.0f;
-    for(auto i = 0; i <= x; i++) {
-      res += util::combination(n + x, n + i) *
+    for(auto i = 0; i <= x; ++i) {
+      res += mathutils::combination(n + x, n + i) *
              std::pow(e, x - i) * std::pow(1.0f - e, n + i);
       // combination()の結果ががオーバーフローした場合の対処
       if(res < 0.0f) return 0.0f;
@@ -72,17 +83,17 @@ auto SA::_constraints(const Counts& counts) const -> bool {
   };
 
   auto success_rate = 1.0f;
-  for(auto i = 0; i < static_cast<int>(counts.size()); i++) {
-    const auto& module = this->modules_[i];
+  for(auto i = 0u; i < counts.size(); ++i) {
+    auto const& module = modules_[i];
     success_rate *= g(module.error_rate, module.count, counts[i]);
   }
-  return this->error_rate_threshold_ >= 1.0f - success_rate;
+  return error_rate_threshold_ >= 1.0f - success_rate;
 }
 
-auto SA::_evaluate(const Counts& counts) const -> float {
+auto SA::_evaluate(Counts const& counts) const -> float {
   auto value = 0.0f;
-  for(auto i = 0; i < static_cast<int>(counts.size()); i++) {
-    value += this->modules_[i].cost * counts[i];
+  for(auto i = 0u; i < counts.size(); ++i) {
+    value += modules_[i].cost * counts[i];
   }
   return value;
 }
@@ -90,21 +101,21 @@ auto SA::_evaluate(const Counts& counts) const -> float {
 auto SA::_optimize(Counts counts) const -> Counts {
   auto temperature = SA::max_temperature;
 
-  auto value = this->_evaluate(counts);
-  auto satisfied = this->_constraints(counts);
-  auto energy = this->_weight(value, satisfied);
+  auto value = _evaluate(counts);
+  auto satisfied = _constraints(counts);
+  auto energy = _weight(value, satisfied);
 
   auto result_counts = counts;
   auto result_energy = energy;
 
   while(temperature >= SA::min_temperature) {
-    for(auto i = 0; i < SA::max_iter; i++) {
-      auto next_counts = this->_generate(counts);
-      auto next_value = this->_evaluate(next_counts);
-      auto next_satisfied = this->_constraints(next_counts);
-      auto next_energy = this->_weight(next_value, next_satisfied);
+    for(auto i = 0; i < SA::max_iter; ++i) {
+      auto next_counts = _generate(counts);
+      auto next_value = _evaluate(next_counts);
+      auto next_satisfied = _constraints(next_counts);
+      auto next_energy = _weight(next_value, next_satisfied);
 
-      if(!this->_accept(temperature, energy, next_energy)) continue;
+      if(!_accept(temperature, energy, next_energy)) continue;
 
       if(next_satisfied && (!satisfied || result_energy > next_energy)) {
         satisfied = true;
@@ -115,22 +126,9 @@ auto SA::_optimize(Counts counts) const -> Counts {
       counts = std::move(next_counts);
       energy = next_energy;
     }
-    temperature = this->_reduce(temperature);
+    temperature = _reduce(temperature);
   }
 
   return satisfied ? std::move(result_counts) : Counts();
-}
-
-auto SA::optimize(const Modules& modules,
-                  float error_rate_threshold) const -> Counts {
-  this->modules_ = modules;
-  this->error_rate_threshold_ = error_rate_threshold;
-
-  auto spare_counts = this->_optimize(this->_init());
-
-  this->modules_.shrink_to_fit();
-
-  return std::move(spare_counts);
-}
 }
 }

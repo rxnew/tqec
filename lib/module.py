@@ -11,7 +11,6 @@ import sys
 import tempfile
 
 from collections import OrderedDict
-from functools import reduce
 
 # ac: algorithmic circuit
 class Module:
@@ -21,9 +20,9 @@ class Module:
 
     __counter  = {}
     __commands = {
-        'spare_optimization': './c++/bin/spare_optimization %s %f',
-        'placement'         : './bin/placement/spp3 %s',
-        'parallelization'   : './bin/parallelization/main %s'
+        'optimization'   : './bin/optimization/sa %s',
+        'placement'      : './bin/placement/spp3 %s',
+        'parallelization': './bin/parallelization/csvd_ev1 %s'
     }
 
     @classmethod
@@ -278,12 +277,27 @@ class Module:
         if self.is_elementary():
             return
 
-        spare_counts = self.__optimize_spare_counts(permissible_error_rate)
-
-        for (spare_id, spare_count) in spare_counts.items():
-            self.get_inner(spare_id).spare_count = spare_count
-
+        self.__optimize_spare_counts(permissible_error_rate)
         self.__update_error_rate()
+
+    def __optimize_spare_counts(self, permissible_error_rate):
+        modules = self.__make_optimization_modules()
+
+        with tempfile.NamedTemporaryFile('w') as fp:
+            json.dump({'modules': modules, 'error_threshold': permissible_error_rate}, fp)
+            fp.flush()
+            result = self.__exec_subproccess('optimization', fp.name)
+
+        spare_counts = list(map(int, result.rstrip().split(',')))
+
+        return self.__set_spare_counts(spare_counts)
+
+    def __make_optimization_modules(self):
+        return [inner.to_optimization_format() for inner in self.inners]
+
+    def __set_spare_counts(self, spare_counts):
+        for inner, spare_count in zip(self.inners, spare_counts):
+            inner.spare_count = spare_count
 
     def __update_error_rate(self):
         success_rate = 1.0
@@ -300,55 +314,14 @@ class Module:
 
         self.error_rate = 1.0 - success_rate
 
-    def __optimize_spare_counts(self, permissible_error_rate):
-        inners_dict = self.__make_spare_optimization_inners_dict()
-
-        with tempfile.NamedTemporaryFile('w') as fp:
-            # 順序保持のため必要
-            ordered_inner_ids = self.__write_spare_optimization_input_file(inners_dict, fp)
-
-            cmd = self.__commands['spare_optimization'] % (fp.name, permissible_error_rate)
-            process = subprocess.Popen(cmd, shell=True, \
-                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            process.wait()
-            stdout = process.communicate()[0]
-
-        spare_counts = list(map(int, stdout.decode('utf-8').rstrip().split(',')))
-
-        return {id: count for (id, count) in zip(ordered_inner_ids, spare_counts)}
-
-    # キーはid
-    # 値は[コスト, エラー率, 個数]
-    def __make_spare_optimization_inners_dict(self):
-        return {inner.id: [
-            reduce(lambda x, y: x * y, inner.size),
-            inner.error_rate,
-            inner.count
-        ] for inner in self.inners}
-
-    def __write_spare_optimization_input_file(self, inners_dict, fp):
-        writer = csv.writer(fp)
-        ordered_inner_ids = []
-
-        for (inner_id, inner) in inners_dict.items():
-            writer.writerow(inner)
-            ordered_inner_ids.append(inner_id)
-        fp.flush()
-
-        return ordered_inner_ids
-
     def __parallelize(self):
         with tempfile.NamedTemporaryFile('w') as fp:
             json.dump(self.to_qc(), fp)
             fp.flush()
 
-            cmd = self.__commands['parallelization'] % (fp.name)
-            process = subprocess.Popen(cmd, shell=True, \
-                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            process.wait()
-            stdout = process.communicate()[0]
+            result = self.__exec_subproccess('parallelization', fp.name)
 
-        icpm = Converter.to_icpm(json.loads(stdout.decode('utf-8')))
+        icpm = Converter.to_icpm(json.loads(result))
         self.circuit['operations'] = icpm.get('circuit', {}).get('operations', [])
 
         #self.set_bits()

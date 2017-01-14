@@ -1,7 +1,9 @@
 from module import Module
 
 import json
+
 from collections import OrderedDict
+from functools import reduce
 
 class InnerModule:
     @classmethod
@@ -49,6 +51,12 @@ class InnerModule:
             ))
             for position in self.positions
         ]
+
+    def to_optimization_format(self):
+        return {'cost': self.cost(), 'error': self.error_rate, 'number': self.count}
+
+    def cost(self):
+        return reduce(lambda x, y: x * y, self.size)
 
     def get_input_positions(self):
         return [self.get_raw_io_format(input, 0) for input in self.inputs]
