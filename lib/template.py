@@ -13,13 +13,8 @@ class Template:
     data_directory_path = './data/templates/'
 
     @classmethod
-    @Util.cache()
-    def load(cls, type_name):
-        return Template(type_name)
-
-    @classmethod
     @Util.decode_dagger
-    def __load(cls, type_name):
+    def load(cls, type_name):
         file_name = cls.data_directory_path + type_name.lower() + '.json'
 
         try:
@@ -35,13 +30,14 @@ class Template:
 
         return json_object
 
+    @Util.cache()
     def __new__(cls, type_name):
         if not type_name: return None
         return super().__new__(cls)
 
     @Util.encode_dagger
     def __init__(self, type_name):
-        json_object = Template.__load(type_name)
+        json_object = self.load(type_name)
 
         self.type_name       = type_name
         self.pure_error_rate = json_object.get('error', 0.0)
@@ -84,7 +80,7 @@ class Template:
             inner_type = inner['type']
             inner_count = inner['number']
             if not inner_type: continue
-            inner = self.load(inner_type)
+            inner = Template(inner_type)
             self.inners.append((inner, inner_count))
             pure_success_rate *= pow(1.0 - inner.pure_error_rate, inner_count)
 
