@@ -30,12 +30,12 @@ class Template:
 
         return json_object
 
+    @Util.encode_dagger
     @Util.cache()
     def __new__(cls, type_name):
         if not type_name: return None
         return super().__new__(cls)
 
-    @Util.encode_dagger
     def __init__(self, type_name):
         json_object = self.load(type_name)
 
