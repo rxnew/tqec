@@ -63,10 +63,10 @@ class Module:
         self.__set_size()
 
     def dump(self, indent=4):
-        if not os.path.isdir(Module.dump_directory_path):
-            os.makedirs(Module.dump_directory_path)
+        if not os.path.isdir(self.dump_directory_path):
+            os.makedirs(self.dump_directory_path)
 
-        file_name = Module.make_file_name(self.id)
+        file_name = self.make_file_name(self.id)
 
         with open(file_name, 'w') as fp:
             json.dump(self.to_output_format(), fp, indent=indent)
