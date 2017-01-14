@@ -4,19 +4,25 @@ from util import Util
 import copy
 import csv
 import json
+import math
 import os
 import re
 import subprocess
 import sys
 import tempfile
 
+import numpy as np
+
 from collections import OrderedDict
 
 # ac: algorithmic circuit
 class Module:
     dump_directory_path = './'
+    file_name_prefix    = 'module_'
     inner_margin        = [2, 2, 2]
     ac_margin           = [0, 2, 0]
+    cnot_length         = 4
+    pin_length          = 6
 
     __counter  = {}
     __commands = {
@@ -29,23 +35,24 @@ class Module:
     def make_id(cls, type_name):
         number = cls.__counter.get(type_name, 0)
         cls.__counter[type_name] = number + 1
-
         return type_name.lower() + '_' + str(number)
 
     @classmethod
+    @Util.decode_dagger
     def make_file_name(cls, id):
-        return cls.dump_directory_path + 'module_' + id.replace('*', '+') + '.json'
+        return cls.dump_directory_path + cls.file_name_prefix + id + '.json'
 
     @classmethod
     def __exec_subproccess(cls, command_key, file_name):
         command = cls.__commands[command_key] % (file_name)
-        process = subprocess.Popen(command, shell=True, \
-                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        process.wait()
-        stdout = process.communicate()[0]
+        try:
+            stdout = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as e:
+            print('Subprocess output:', os.linesep, e.output, os.linesep, file=sys.stderr)
+            raise
         return stdout.decode('utf-8')
 
-    def __init__(self, template, inners, permissible_error_rate, permissible_size):
+    def __init__(self, template, inners, *constraints):
         self.id         = self.make_id(template.type_name)
         self.type_name  = template.type_name
         self.circuit    = template.circuit
@@ -56,7 +63,7 @@ class Module:
         self.__prepare()
 
         self.__parallelize()
-        self.__place(permissible_error_rate, permissible_size)
+        self.__place(*constraints)
         self.__connect()
 
         # テスト用
@@ -67,7 +74,6 @@ class Module:
             os.makedirs(self.dump_directory_path)
 
         file_name = self.make_file_name(self.id)
-
         with open(file_name, 'w') as fp:
             json.dump(self.to_output_format(), fp, indent=indent)
             fp.flush()
@@ -105,22 +111,10 @@ class Module:
 
     def __prepare(self):
         self.__set_inners_id_dict()
-        self.__set_id_of_pins()
         self.__set_ac_size()
 
     def __set_inners_id_dict(self):
         self.__inner_id_dict = {inner.id: i for i, inner in enumerate(self.inners)}
-
-    # 同一テンプレートから異なるモジュールを生成しない場合
-    def __set_id_of_pins(self):
-        inner_type_dict = {inner.type_name: inner.id for inner in self.inners}
-
-        for key in ['initializations', 'operations']:
-            for i in range(len(self.circuit[key])):
-                element = self.circuit[key][i]
-                if element['type'] != 'pin': continue
-                type_name = element['module']
-                self.circuit[key][i]['module'] = inner_type_dict[type_name]
 
     def __set_ac_size(self):
         # i番目のビット線の座標は [(i + 1) * 2, 0, 0] (i >= 0)
@@ -139,21 +133,18 @@ class Module:
 
             for operation in operation_step:
                 operation_type = operation['type'].lower()
-
                 if operation_type == 'cnot':
-                    step_length = 4 # 2 * 2
+                    step_length = max(step_length, self.cnot_length)
                 elif operation_type == 'pin':
-                    step_length = 6
+                    step_length = max(step_length, self.pin_length)
 
             circuit_length += step_length
 
         return circuit_length
 
     # TODO: connectionを考慮
+    @Util.non_elementary()
     def __set_size(self):
-        if self.is_elementary():
-            return
-
         ac = {'size': self.__ac_size, 'position': [0, 0, 0]}
         rectangles = self.to_output_format_inners() + [ac]
         convex_hull = self.__calculate_convex_hull(rectangles)
@@ -170,14 +161,76 @@ class Module:
                 for k in range(3):
                     self.inners[i].positions[j][k] += base_position[k]
 
+    def __parallelize(self):
+        with tempfile.NamedTemporaryFile('w') as fp:
+            json.dump(self.to_qc(), fp)
+            fp.flush()
+            result = self.__exec_subproccess('parallelization', fp.name)
+
+        icpm = Converter.to_icpm(json.loads(result))
+        self.circuit['operations'] = icpm.get('circuit', {}).get('operations', [])
+
+        #self.set_bits()
+
     def __place(self, permissible_error_rate, permissible_size):
+        self.__set_id_of_pins()
         self.__set_spares(permissible_error_rate)
         self.__place_inners(permissible_size)
 
-    def __place_inners(self, permissible_size):
-        if self.is_elementary():
-            return
+    # 同一テンプレートから異なるモジュールを生成しない場合
+    def __set_id_of_pins(self):
+        inner_type_dict = {inner.type_name: inner.id for inner in self.inners}
 
+        def convert(elements):
+            for i in range(len(elements)):
+                if isinstance(elements[i], list):
+                    convert(elements[i])
+                    continue
+                if elements[i]['type'] != 'pin' : continue
+                type_name = elements[i]['module']
+                elements[i]['module'] = inner_type_dict[type_name]
+
+        for key in ['initializations', 'operations']:
+            convert(self.circuit[key])
+
+    @Util.non_elementary()
+    def __set_spares(self, permissible_error_rate):
+        self.__optimize_spare_counts(permissible_error_rate)
+        self.__update_error_rate()
+
+    def __optimize_spare_counts(self, permissible_error_rate):
+        modules = self.__make_optimization_modules()
+
+        with tempfile.NamedTemporaryFile('w') as fp:
+            json.dump({'modules': modules, 'error_threshold': permissible_error_rate}, fp)
+            fp.flush()
+            result = self.__exec_subproccess('optimization', fp.name)
+
+        spare_counts = list(map(int, result.rstrip().split(',')))
+
+        return self.__set_spare_counts(spare_counts)
+
+    def __make_optimization_modules(self):
+        return [inner.to_optimization_format() for inner in self.inners]
+
+    def __set_spare_counts(self, spare_counts):
+        for inner, spare_count in zip(self.inners, spare_counts):
+            inner.spare_count = spare_count
+
+    def __update_error_rate(self):
+        self.error_rate = 1.0 - np.prod([
+            self.__calculate_inner_success_rate(inner) for inner in self.inners
+        ])
+
+    def __calculate_inner_success_rate(self, inner):
+        e, n, x = inner.error_rate, inner.count, inner.spare_count
+        return math.fsum([
+            Util.combination(n + x, n + i) * pow(e, x - i) * pow(1.0 - e, n + i)
+            for i in range(x + 1)
+        ])
+
+    @Util.non_elementary()
+    def __place_inners(self, permissible_size):
         max_inner_size = self.__max_inner_size()
         rectangles, inner_ids = self.__make_placement_rectangles()
 
@@ -220,8 +273,8 @@ class Module:
         return True
 
     def __calculate_convex_hull(self, rectangles):
-        position            = [ sys.maxsize,  sys.maxsize,  sys.maxsize]
-        antigoglin_position = [-sys.maxsize, -sys.maxsize, -sys.maxsize]
+        position            = [ sys.maxsize for i in range(3)]
+        antigoglin_position = [-sys.maxsize for i in range(3)]
 
         for rectangle in rectangles:
             for i in range(3):
@@ -243,14 +296,13 @@ class Module:
                 rectangles.append(rectangle)
                 inner_ids.append(inner.id)
 
-        return (rectangles, inner_ids)
+        return rectangles, inner_ids
 
     def __make_placement_base_y(self, max_inner_size, ac_size):
         x = max(ac_size[0], max_inner_size[0])
         z = max(ac_size[2], max_inner_size[2])
         base_size = [x, 0, z]
         base_position = [0, ac_size[1], 0]
-
         return {'size': base_size, 'position': base_position}
 
     def __make_placement_base_z(self, max_inner_size, ac_size, permissible_size):
@@ -258,7 +310,6 @@ class Module:
         y = permissible_size[1] - ac_size[1]
         base_size = [x, y, 0]
         base_position = [0, ac_size[1], 0]
-
         return {'size': base_size, 'position': base_position}
 
     def __max_inner_size(self):
@@ -266,65 +317,11 @@ class Module:
         for inner in self.inners:
             for i in range(3):
                 max_inner_size[i] = max(max_inner_size[i], inner.size[i])
-
         return max_inner_size
 
     def __set_inners_positions(self, rectangles, inner_ids):
-        for (rectangle, id) in zip(rectangles, inner_ids):
+        for rectangle, id in zip(rectangles, inner_ids):
             self.get_inner(id).positions.append(rectangle['position'])
-
-    def __set_spares(self, permissible_error_rate):
-        if self.is_elementary():
-            return
-
-        self.__optimize_spare_counts(permissible_error_rate)
-        self.__update_error_rate()
-
-    def __optimize_spare_counts(self, permissible_error_rate):
-        modules = self.__make_optimization_modules()
-
-        with tempfile.NamedTemporaryFile('w') as fp:
-            json.dump({'modules': modules, 'error_threshold': permissible_error_rate}, fp)
-            fp.flush()
-            result = self.__exec_subproccess('optimization', fp.name)
-
-        spare_counts = list(map(int, result.rstrip().split(',')))
-
-        return self.__set_spare_counts(spare_counts)
-
-    def __make_optimization_modules(self):
-        return [inner.to_optimization_format() for inner in self.inners]
-
-    def __set_spare_counts(self, spare_counts):
-        for inner, spare_count in zip(self.inners, spare_counts):
-            inner.spare_count = spare_count
-
-    def __update_error_rate(self):
-        success_rate = 1.0
-
-        for inner in self.inners:
-            inner_success_rate = 0.0
-
-            (e, n, x) = (inner.error_rate, inner.count, inner.spare_count)
-            for i in range(x + 1):
-                inner_success_rate \
-                    += Util.combination(n + x, n + i) * pow(e, x - i) * pow(1.0 - e, n + i)
-
-            success_rate *= inner_success_rate
-
-        self.error_rate = 1.0 - success_rate
-
-    def __parallelize(self):
-        with tempfile.NamedTemporaryFile('w') as fp:
-            json.dump(self.to_qc(), fp)
-            fp.flush()
-
-            result = self.__exec_subproccess('parallelization', fp.name)
-
-        icpm = Converter.to_icpm(json.loads(result))
-        self.circuit['operations'] = icpm.get('circuit', {}).get('operations', [])
-
-        #self.set_bits()
 
     def __set_bits(self):
         # テスト

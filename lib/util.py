@@ -1,5 +1,7 @@
 import sympy
 
+from functools import wraps
+
 class Util:
     @staticmethod
     def combination(n, k):
@@ -24,8 +26,59 @@ class Util:
 
         while(True):
             y = f.subs([(x, xi)])
-            if(not is_error(e, y)):
-                break
+            if(not is_error(e, y)): break
             xi = xi - y / df.subs([(x, xi)])
 
         return xi
+
+    @staticmethod
+    def cache(encoder=lambda arg: arg, decoder=lambda arg: arg):
+        def decorator(f):
+            cached = {}
+
+            @wraps(f)
+            def wrapper(self, *args):
+                if args in cached: return encoder(cached[args])
+                result = f(self, *args)
+                cached[args] = decoder(result)
+                return result
+
+            return wrapper
+        return decorator
+
+    @staticmethod
+    def non_elementary(default=None):
+        def decorator(f):
+            @wraps(f)
+            def wrapper(self, *args):
+                if self.is_elementary(): return default
+                return f(self, *args)
+
+            return wrapper
+        return decorator
+
+    @staticmethod
+    def replace(old, new):
+        def decorator(f):
+            @wraps(f)
+            def wrapper(self, arg):
+                arg = arg.replace(old, new)
+                return f(self, arg)
+            return wrapper
+        return decorator
+
+    @staticmethod
+    def encode_dagger(f):
+        @wraps(f)
+        @Util.replace('+', '*')
+        def wrapper(*args):
+            return f(*args)
+        return wrapper
+
+    @staticmethod
+    def decode_dagger(f):
+        @wraps(f)
+        @Util.replace('*', '+')
+        def wrapper(*args):
+            return f(*args)
+        return wrapper

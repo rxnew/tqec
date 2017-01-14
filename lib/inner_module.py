@@ -8,9 +8,6 @@ from functools import reduce
 class InnerModule:
     @classmethod
     def load(cls, id):
-        if not id:
-            return None
-
         file_name = Module.make_file_name(id)
 
         with open(file_name, 'r') as fp:

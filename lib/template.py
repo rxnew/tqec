@@ -11,25 +11,19 @@ from functools import reduce
 
 class Template:
     data_directory_path = './data/templates/'
-    __cache = {}
-    __deployment_cache = {}
 
     @classmethod
+    @Util.cache()
     def load(cls, type_name):
-        if type_name in cls.__cache:
-            return cls.__cache[type_name]
-
-        template = Template(type_name)
-        cls.__cache[type_name] = template
-
-        return template
+        return Template(type_name)
 
     @classmethod
+    @Util.decode_dagger
     def __load(cls, type_name):
         file_name = cls.data_directory_path + type_name.lower() + '.json'
 
         try:
-            fp = open(file_name.replace('*', '+'), 'r')
+            fp = open(file_name, 'r')
         except IOError:
             # ゲート変換データベースによる分解
             #cls.decompose()
@@ -42,10 +36,10 @@ class Template:
         return json_object
 
     def __new__(cls, type_name):
-        if not type_name:
-            return None
+        if not type_name: return None
         return super().__new__(cls)
 
+    @Util.encode_dagger
     def __init__(self, type_name):
         json_object = Template.__load(type_name)
 
@@ -58,27 +52,22 @@ class Template:
         self.__set_inners(self.__collect_inners())
 
     def deploy(self, permissible_error_rate, permissible_size):
-        inner_module = self.__deploy_from_cache(permissible_error_rate, permissible_size)
-
-        if inner_module:
-            return inner_module
-
-        inner_modules = self.__deploy_inners(permissible_error_rate, permissible_size)
-        module = Module(self, inner_modules, permissible_error_rate, permissible_size)
-        module.dump()
-        key = (self.type_name, permissible_error_rate, permissible_size)
-        Template.__deployment_cache[key] = module.id
-        inner_module = InnerModule(module)
-
-        return inner_module
+        return self.__deploy(self.type_name, permissible_error_rate, permissible_size)
 
     def is_elementary(self):
         return not self.inners
 
+    @Util.cache(encoder=InnerModule.load, decoder=lambda arg: arg.id)
+    def __deploy(self, type_name, *constraints):
+        inner_modules = self.__deploy_inners(*constraints)
+        module = Module(self, inner_modules, *constraints)
+        module.dump()
+        inner_module = InnerModule(module)
+        return inner_module
+
     def __collect_inners(self):
         initializations = self.circuit['initializations']
         operations = self.circuit['operations']
-
         inners = defaultdict(int)
 
         for elements in [initializations, operations]:
@@ -86,7 +75,7 @@ class Template:
                 if element['type'] == 'pin':
                     inners[element['module']] += 1
 
-        return [{'type': key, 'number': value} for (key, value) in inners.items()]
+        return [{'type': key, 'number': value} for key, value in inners.items()]
 
     def __set_inners(self, inners):
         pure_success_rate = 1.0 - self.pure_error_rate
@@ -94,78 +83,53 @@ class Template:
         for inner in inners:
             inner_type = inner['type']
             inner_count = inner['number']
-
-            if not inner_type:
-                continue
-
-            inner = Template.load(inner_type)
+            if not inner_type: continue
+            inner = self.load(inner_type)
             self.inners.append((inner, inner_count))
             pure_success_rate *= pow(1.0 - inner.pure_error_rate, inner_count)
 
         self.pure_error_rate = 1.0 - pure_success_rate
 
-    def __deploy_from_cache(self, permissible_error_rate, permissible_size):
-        key = (self.type_name, permissible_error_rate, permissible_size)
-        module_id = Template.__deployment_cache.get(key)
-        inner_module = InnerModule.load(module_id)
-
-        return inner_module
-
     # 同一テンプレートから異なるモジュールを生成しない場合
-    def __deploy_inners(self, permissible_error_rate, permissible_size):
-        if self.is_elementary():
-            return []
-
+    @Util.non_elementary([])
+    def __deploy_inners(self, *constraints):
         inner_modules = []
-
-        inner_args_func \
-            = self.__make_deployment_args_func(permissible_error_rate, permissible_size)
+        inner_args_func = self.__make_deployment_args_func(*constraints)
 
         for inner, inner_count in self.inners:
-            inner_permissible_error_rate, inner_permissible_size = inner_args_func(inner)
-            inner_module \
-                = inner.deploy(inner_permissible_error_rate, inner_permissible_size)
-            inner_module.count =  inner_count
+            inner_constraints = inner_args_func(inner)
+            inner_module = inner.deploy(*inner_constraints)
+            inner_module.count = inner_count
             inner_modules.append(inner_module)
 
         self.inners.clear()
-
         return inner_modules
 
     # 同一テンプレートから異なるモジュールを生成する可能性がある場合 (現在不使用)
-    def __deploy_inners_not_used(self, permissible_error_rate, permissible_size):
-        if self.is_elementary():
-            return []
-
+    @Util.non_elementary([])
+    def __deploy_inners_not_used(self, *constraints):
         inner_modules_dict = {}
+        inner_args_func = self.__make_deployment_args_func(*constraints)
 
-        inner_args_func \
-            = self.__make_deployment_args_func(permissible_error_rate, permissible_size)
-
-        for (inner, inner_count) in self.inners:
-            (inner_permissible_error_rate, inner_permissible_size) = inner_args_func(inner)
+        for inner, inner_count in self.inners:
+            inner_constraints = inner_args_func(inner)
 
             for i in range(inner_count):
-                inner_module \
-                    = inner.deploy(inner_permissible_error_rate, inner_permissible_size)
-
+                inner_module = inner.deploy(*inner_constraints)
                 if inner_module.id in inner_modules_dict:
                     inner_modules_dict[inner_module.id].count += 1
                 else:
                     inner_modules_dict[inner_module.id] = inner_module
 
         self.inners.clear()
-
         return list(inner_modules_dict.values())
 
     def __make_deployment_args_func(self, permissible_error_rate, permissible_size):
-        assert(not self.is_elementary())
-
         error_rate_func = self.__make_permissible_error_rate_func(permissible_error_rate)
 
         def make_deployment_args(inner):
             if inner.is_elementary():
-                return (inner.pure_error_rate, permissible_size)
+                return inner.pure_error_rate, permissible_size
 
             inner_permissible_error_rate = error_rate_func(inner.pure_error_rate)
             # Y軸方向はアルゴリズミック回路の分だけ引く
@@ -174,7 +138,7 @@ class Template:
                 permissible_size[1] - (2 + Module.ac_margin[1])
             )
 
-            return (inner_permissible_error_rate, inner_permissible_size)
+            return inner_permissible_error_rate, inner_permissible_size
 
         return make_deployment_args
 
@@ -182,11 +146,11 @@ class Template:
         # ニュートン法における許容誤差
         e = 0.00001
 
-        (m, x) = sympy.symbols('m x')
+        m, x = sympy.symbols('m x')
         f = -m * x + 1
 
         g = 1
-        for (inner, inner_count) in self.inners:
+        for inner, inner_count in self.inners:
             g *= f.subs([(x, inner.pure_error_rate)]) ** inner_count
         g -= 1 - permissible_error_rate
 
