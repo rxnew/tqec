@@ -9,7 +9,7 @@ class InnerModule:
         if not id:
             return None
 
-        file_name = Module.get_file_name(id)
+        file_name = Module.make_file_name(id)
 
         with open(file_name, 'r') as fp:
             json_object = json.load(fp)
@@ -39,24 +39,6 @@ class InnerModule:
         self.count       = 1
         self.spare_count = 0
         self.positions   = []
-
-    def __len__(self):
-        return len(self.__dict__)
-
-    def __repr__(self):
-        return str(self.__dict__)
-
-    def __str__(self):
-        return str(self.__dict__)
-
-    def __iter__(self):
-        return self.__dict__.iteritems()
-
-    def __getitem__(self, key):
-        return self.__dict__[key]
-
-    def __setitem__(self, key, value):
-        self.__dict__[key] = value
 
     def to_output_format(self):
         return [

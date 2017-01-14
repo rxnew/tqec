@@ -35,7 +35,7 @@ class Module:
 
     @classmethod
     def make_file_name(cls, id):
-        return cls.dump_directory_path + 'module_' + id + '.json'
+        return cls.dump_directory_path + 'module_' + id.replace('*', '+') + '.json'
 
     @classmethod
     def __exec_subproccess(cls, command_key, file_name):
@@ -212,8 +212,11 @@ class Module:
     def __is_within_permissible_size(self, rectangles, permissible_size):
         convex_hull = self.__calculate_convex_hull(rectangles)
 
-        if convex_hull['size'][0] > permissible_size[0]    : return False
-        if convex_hull['size'][1] > permissible_size[1] - 4: return False
+        if convex_hull['size'][0] > permissible_size[0]:
+            return False
+        if convex_hull['size'][1] > permissible_size[1] - \
+           (self.__ac_size[1] + self.ac_margin[1]):
+            return False
 
         return True
 

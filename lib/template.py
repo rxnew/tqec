@@ -29,7 +29,7 @@ class Template:
         file_name = cls.data_directory_path + type_name.lower() + '.json'
 
         try:
-            fp = open(file_name, 'r')
+            fp = open(file_name.replace('*', '+'), 'r')
         except IOError:
             # ゲート変換データベースによる分解
             #cls.decompose()
