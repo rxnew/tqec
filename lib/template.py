@@ -169,7 +169,10 @@ class Template:
 
             inner_permissible_error_rate = error_rate_func(inner.pure_error_rate)
             # Y軸方向はアルゴリズミック回路の分だけ引く
-            inner_permissible_size = (permissible_size[0], permissible_size[1] - 4)
+            inner_permissible_size = (
+                permissible_size[0],
+                permissible_size[1] - (2 + Module.ac_margin[1])
+            )
 
             return (inner_permissible_error_rate, inner_permissible_size)
 

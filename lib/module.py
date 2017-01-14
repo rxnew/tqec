@@ -13,10 +13,14 @@ import tempfile
 from collections import OrderedDict
 from functools import reduce
 
+# ac: algorithmic circuit
 class Module:
     dump_directory_path = './'
-    counter = {}
-    commands = {
+    inner_margin        = [2, 2, 2]
+    ac_margin           = [0, 2, 0]
+
+    __counter  = {}
+    __commands = {
         'spare_optimization': './c++/bin/spare_optimization %s %f',
         'placement'         : './bin/placement/spp3 %s',
         'parallelization'   : './bin/parallelization/main %s'
@@ -24,8 +28,8 @@ class Module:
 
     @classmethod
     def make_id(cls, type_name):
-        number = cls.counter.get(type_name, 0)
-        cls.counter[type_name] = number + 1
+        number = cls.__counter.get(type_name, 0)
+        cls.__counter[type_name] = number + 1
 
         return type_name.lower() + '_' + str(number)
 
@@ -35,7 +39,7 @@ class Module:
 
     @classmethod
     def __exec_subproccess(cls, command_key, file_name):
-        command = Module.commands[command_key] % (file_name)
+        command = cls.__commands[command_key] % (file_name)
         process = subprocess.Popen(command, shell=True, \
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         process.wait()
@@ -103,7 +107,7 @@ class Module:
     def __prepare(self):
         self.__set_inners_id_dict()
         self.__set_id_of_pins()
-        self.__set_algorithmic_circuit_size()
+        self.__set_ac_size()
 
     def __set_inners_id_dict(self):
         self.__inner_id_dict = {inner.id: i for i, inner in enumerate(self.inners)}
@@ -119,13 +123,13 @@ class Module:
                 type_name = element['module']
                 self.circuit[key][i]['module'] = inner_type_dict[type_name]
 
-    def __set_algorithmic_circuit_size(self):
+    def __set_ac_size(self):
         # i番目のビット線の座標は [(i + 1) * 2, 0, 0] (i >= 0)
         w = (len(self.circuit['bits']) + 1) << 1
-        d = self.__calculate_algorithmic_circuit_length()
-        self.__algorithmic_circuit_size = [w, 4, d]
+        d = self.__calculate_ac_length()
+        self.__ac_size = [w, 2, d]
 
-    def __calculate_algorithmic_circuit_length(self):
+    def __calculate_ac_length(self):
         circuit_length = 0
 
         for operation_step in self.circuit['operations']:
@@ -151,12 +155,9 @@ class Module:
         if self.is_elementary():
             return
 
-        algorithmic_circuit = {
-            'size'    : self.__algorithmic_circuit_size,
-            'position': [0, 0, 0]
-        }
-        hyperrectangles = self.to_output_format_inners() + [algorithmic_circuit]
-        convex_hull = self.__calculate_convex_hull(hyperrectangles)
+        ac = {'size': self.__ac_size, 'position': [0, 0, 0]}
+        rectangles = self.to_output_format_inners() + [ac]
+        convex_hull = self.__calculate_convex_hull(rectangles)
         self.size = convex_hull['size']
         self.__update_positions(convex_hull['position'])
 
@@ -179,23 +180,27 @@ class Module:
             return
 
         max_inner_size = self.__max_inner_size()
-        hyperrectangles, inner_ids = self.__make_placement_hyperrectangles()
+        rectangles, inner_ids = self.__make_placement_rectangles()
+
+        # マージンを考慮
+        max_inner_size = [max_inner_size[i] + self.inner_margin[i] for i in range(3)]
+        ac_size        = [self.__ac_size[i] + self.ac_margin[i]    for i in range(3)]
 
         # Y軸方向のストリップパッキング
-        base = self.__make_placement_base_y(max_inner_size)
-        hyperrectangles = self.__place_hyperrectangles(hyperrectangles, base)
+        base = self.__make_placement_base_y(max_inner_size, ac_size)
+        rectangles = self.__place_rectangles(rectangles, base)
 
-        if not self.__is_within_permissible_size(hyperrectangles, permissible_size):
+        if not self.__is_within_permissible_size(rectangles, permissible_size):
             # Z軸方向のストリップパッキング
-            base = self.__make_placement_base_z(max_inner_size, permissible_size)
-            hyperrectangles = self.__place_hyperrectangles(hyperrectangles, base)
+            base = self.__make_placement_base_z(max_inner_size, ac_size, permissible_size)
+            rectangles = self.__place_rectangles(rectangles, base)
 
-        self.__set_inners_positions(hyperrectangles, inner_ids)
+        self.__set_inners_positions(rectangles, inner_ids)
 
-    def __place_hyperrectangles(self, hyperrectangles, base):
+    def __place_rectangles(self, rectangles, base):
         with tempfile.NamedTemporaryFile('w') as fp:
             json.dump({
-                'hyperrectangles': hyperrectangles,
+                'hyperrectangles': rectangles,
                 'base'           : base
             }, fp)
 
@@ -204,56 +209,53 @@ class Module:
 
         return json.loads(result)['hyperrectangles']
 
-    def __is_within_permissible_size(self, hyperrectangles, permissible_size):
-        convex_hull = self.__calculate_convex_hull(hyperrectangles)
+    def __is_within_permissible_size(self, rectangles, permissible_size):
+        convex_hull = self.__calculate_convex_hull(rectangles)
 
         if convex_hull['size'][0] > permissible_size[0]    : return False
         if convex_hull['size'][1] > permissible_size[1] - 4: return False
 
         return True
 
-    def __calculate_convex_hull(self, hyperrectangles):
-        convex_hull_position            = [ sys.maxsize,  sys.maxsize,  sys.maxsize]
-        convex_hull_antigoglin_position = [-sys.maxsize, -sys.maxsize, -sys.maxsize]
+    def __calculate_convex_hull(self, rectangles):
+        position            = [ sys.maxsize,  sys.maxsize,  sys.maxsize]
+        antigoglin_position = [-sys.maxsize, -sys.maxsize, -sys.maxsize]
 
-        for hyperrectangle in hyperrectangles:
+        for rectangle in rectangles:
             for i in range(3):
-                convex_hull_position[i] \
-                    = min(convex_hull_position[i], hyperrectangle['position'][i])
-                convex_hull_antigoglin_position[i] \
-                    = max(convex_hull_antigoglin_position[i],
-                          hyperrectangle['size'][i] + hyperrectangle['position'][i])
+                n = rectangle['position'][i]
+                position[i]            = min(position[i], n)
+                antigoglin_position[i] = max(antigoglin_position[i], rectangle['size'][i] + n)
 
-        convex_hull_size = [convex_hull_antigoglin_position[i] - convex_hull_position[i]
-                            for i in range(3)]
+        size = [antigoglin_position[i] - position[i] for i in range(3)]
 
-        return {'size': convex_hull_size, 'position': convex_hull_position}
+        return {'size': size, 'position': position}
 
-    def __make_placement_hyperrectangles(self):
-        hyperrectangles = []
+    def __make_placement_rectangles(self):
+        rectangles = []
         inner_ids = []
 
         for inner in self.inners:
-            hyperrectangle = {"size": inner.size}
+            rectangle = {'size': [inner.size[i] + self.inner_margin[i] for i in range(3)]}
             for i in range(inner.count + inner.spare_count):
-                hyperrectangles.append(hyperrectangle)
+                rectangles.append(rectangle)
                 inner_ids.append(inner.id)
 
-        return (hyperrectangles, inner_ids)
+        return (rectangles, inner_ids)
 
-    def __make_placement_base_y(self, max_inner_size):
-        x = max(self.__algorithmic_circuit_size[0], max_inner_size[0])
-        z = max(self.__algorithmic_circuit_size[2], max_inner_size[2])
+    def __make_placement_base_y(self, max_inner_size, ac_size):
+        x = max(ac_size[0], max_inner_size[0])
+        z = max(ac_size[2], max_inner_size[2])
         base_size = [x, 0, z]
-        base_position = [0, 4, 0]
+        base_position = [0, ac_size[1], 0]
 
         return {'size': base_size, 'position': base_position}
 
-    def __make_placement_base_z(self, max_inner_size, permissible_size):
-        x = max(self.__algorithmic_circuit_size[0], max_inner_size[0])
-        y = permissible_size[1] - 4
+    def __make_placement_base_z(self, max_inner_size, ac_size, permissible_size):
+        x = max(ac_size[0], max_inner_size[0])
+        y = permissible_size[1] - ac_size[1]
         base_size = [x, y, 0]
-        base_position = [0, 4, 0]
+        base_position = [0, ac_size[1], 0]
 
         return {'size': base_size, 'position': base_position}
 
@@ -265,9 +267,9 @@ class Module:
 
         return max_inner_size
 
-    def __set_inners_positions(self, hyperrectangles, inner_ids):
-        for (hyperrectangle, id) in zip(hyperrectangles, inner_ids):
-            self.get_inner(id).positions.append(hyperrectangle['position'])
+    def __set_inners_positions(self, rectangles, inner_ids):
+        for (rectangle, id) in zip(rectangles, inner_ids):
+            self.get_inner(id).positions.append(rectangle['position'])
 
     def __set_spares(self, permissible_error_rate):
         if self.is_elementary():
@@ -302,7 +304,7 @@ class Module:
             # 順序保持のため必要
             ordered_inner_ids = self.__write_spare_optimization_input_file(inners_dict, fp)
 
-            cmd = Module.commands['spare_optimization'] % (fp.name, permissible_error_rate)
+            cmd = self.__commands['spare_optimization'] % (fp.name, permissible_error_rate)
             process = subprocess.Popen(cmd, shell=True, \
                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             process.wait()
@@ -337,7 +339,7 @@ class Module:
             json.dump(self.to_qc(), fp)
             fp.flush()
 
-            cmd = Module.commands['parallelization'] % (fp.name)
+            cmd = self.__commands['parallelization'] % (fp.name)
             process = subprocess.Popen(cmd, shell=True, \
                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             process.wait()
