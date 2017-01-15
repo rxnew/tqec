@@ -50,7 +50,11 @@ class InnerModule:
         ]
 
     def to_optimization_format(self):
-        return {'cost': self.cost(), 'error': self.error_rate, 'number': self.count}
+        return {
+            'cost'  : self.cost(),
+            'error' : self.error_rate,
+            'number': self.count
+        }
 
     def cost(self):
         return reduce(lambda x, y: x * y, self.size)

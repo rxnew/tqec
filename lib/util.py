@@ -1,4 +1,7 @@
+import math
 import sympy
+import sys
+import time
 
 from functools import wraps
 
@@ -89,3 +92,13 @@ class Util:
         def wrapper(*args):
             return f(*args)
         return wrapper
+
+    @staticmethod
+    def progressbar(progress):
+        END = 170
+        MAX_LEN = 30
+        BAR_LEN = int(MAX_LEN * progress)
+        return ('[' + '=' * BAR_LEN +
+                ('>' if BAR_LEN < MAX_LEN else '') +
+                ' ' * (MAX_LEN - BAR_LEN) +
+                '] %.1f%%' % (progress * 100.))

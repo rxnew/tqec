@@ -110,10 +110,10 @@ class Module:
         return len(self.inners) == 0
 
     def __prepare(self):
-        self.__set_inners_id_dict()
+        self.__set_inner_id_dict()
         self.__set_ac_size()
 
-    def __set_inners_id_dict(self):
+    def __set_inner_id_dict(self):
         self.__inner_id_dict = {inner.id: i for i, inner in enumerate(self.inners)}
 
     def __set_ac_size(self):
@@ -288,8 +288,10 @@ class Module:
                 antigoglin_position[i] = max(antigoglin_position[i], size[i] + n)
 
         size = [antigoglin_position[i] - position[i] for i in range(3)]
-
-        return {'size': size, 'position': position}
+        return {
+            'size'    : size,
+            'position': position
+        }
 
     def __make_placement_rectangles(self):
         rectangles = []
@@ -309,14 +311,20 @@ class Module:
         z = max(ac_size[2], max_inner_size[2])
         base_size = [x, 0, z]
         base_position = [0, ac_size[1], 0]
-        return {'size': base_size, 'position': base_position}
+        return {
+            'size'    : base_size,
+            'position': base_position
+        }
 
     def __make_placement_base_z(self, max_inner_size, ac_size, permissible_size):
         x = max(ac_size[0], max_inner_size[0])
         y = permissible_size[1] - ac_size[1]
         base_size = [x, y, 0]
         base_position = [0, ac_size[1], 0]
-        return {'size': base_size, 'position': base_position}
+        return {
+            'size'    : base_size,
+            'position': base_position
+        }
 
     def __max_inner_size(self):
         max_inner_size = [0, 0, 0]
@@ -328,7 +336,8 @@ class Module:
     def __set_inners_positions(self, rectangles, inner_ids):
         for rectangle, id in zip(rectangles, inner_ids):
             self.get_inner(id).positions.append([
-                rectangle['position'][i] + self.inner_margin[i] for i in range(3)
+                rectangle['position'][i] + self.inner_margin[i]
+                for i in range(3)
             ])
 
     def __set_bits(self):
