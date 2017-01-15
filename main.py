@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+import logging
 import sys,os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/lib')
 
@@ -20,4 +21,5 @@ def main(argv):
     template.deploy(0.001, (30, 49))
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO)
     main(sys.argv)

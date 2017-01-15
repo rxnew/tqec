@@ -4,6 +4,7 @@ from converter import Converter
 from util import Util
 
 import json
+import logging
 import sympy
 
 from collections import OrderedDict
@@ -11,6 +12,7 @@ from functools import reduce
 
 class Template:
     data_directory_path = './data/templates/'
+    __module_count = 0
 
     @classmethod
     @Util.decode_dagger
@@ -60,6 +62,7 @@ class Template:
         inner_modules = self.__deploy_inners(*constraints)
         module = Module(self, inner_modules, *constraints)
         module.dump()
+        logging.info('Completed to dump the module "%s"', module.id)
         return InnerModule(module)
 
     def __collect_inners(self):
