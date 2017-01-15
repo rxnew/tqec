@@ -14,6 +14,11 @@ class Template:
     data_directory_path = './data/templates/'
     __module_count = 0
 
+    @Util.encode_dagger
+    @Util.cache()
+    def get_instance(cls, type_name):
+        return Template(type_name)
+
     @classmethod
     @Util.decode_dagger
     def load(cls, type_name):
@@ -32,21 +37,7 @@ class Template:
 
         return json_object
 
-    @Util.encode_dagger
-    @Util.cache(cached_hook=lambda obj: setattr(obj, '_Template__setup', Util.nop))
-    def __new__(cls, type_name):
-        return super().__new__(cls)
-
     def __init__(self, type_name):
-        self.__setup(type_name)
-
-    def deploy(self, permissible_error_rate, permissible_size):
-        return self.__deploy(self.type_name, permissible_error_rate, permissible_size)
-
-    def is_elementary(self):
-        return not self.inners
-
-    def __setup(self, type_name):
         json_object = self.load(type_name)
         self.type_name       = type_name
         self.pure_error_rate = json_object.get('error', 0.0)
@@ -55,7 +46,15 @@ class Template:
         self.inners          = [] # (inner, count)
         self.__set_inners(self.__collect_inners())
 
-    @Util.cache(encoder=InnerModule.load, decoder=lambda arg: arg.id)
+    def deploy(self, permissible_error_rate, permissible_size):
+        return self.__deploy(self.type_name, permissible_error_rate, permissible_size)
+
+    def is_elementary(self):
+        return not self.inners
+
+    @Util.cache(encoder=InnerModule.load, decoder=lambda arg: arg.id,
+                keygen=lambda args:
+                (args[0], Util.significant_figure(args[1], 2), args[2]))
     def __deploy(self, type_name, *constraints):
         inner_modules = self.__deploy_inners(*constraints)
         module = Module(self, inner_modules, *constraints)
@@ -82,7 +81,7 @@ class Template:
         for inner in inners:
             inner_type = inner['type']
             inner_count = inner['number']
-            inner = Template(inner_type)
+            inner = self.get_instance(inner_type)
             self.inners.append((inner, inner_count))
             pure_success_rate *= pow(1.0 - inner.pure_error_rate, inner_count)
 

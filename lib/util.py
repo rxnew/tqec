@@ -3,6 +3,7 @@ import sympy
 import sys
 import time
 
+from decimal import Decimal, ROUND_DOWN
 from functools import wraps
 
 class Util:
@@ -11,15 +12,22 @@ class Util:
         pass
 
     @staticmethod
+    def significant_figure(n, k):
+        d = Decimal(n)
+        r = '.' + '0' * (k - 1)
+        while(d < 1):
+            d *= 10
+            r += '0'
+        return Decimal(n).quantize(Decimal(r), rounding=ROUND_DOWN)
+
+    @staticmethod
     def combination(n, k):
         k = min(k, n - k)
         result = type(n)(1)
-
         for i in range(1, k + 1):
             result *= n
             result /= i
             n -= 1
-
         return result
 
     # SymPyオブジェクト
@@ -30,12 +38,10 @@ class Util:
     def newton_raphson_method(f, x, e, is_error=lambda e, y: abs(y) > e):
         df = sympy.diff(f, x)
         xi = 1.0
-
         while(True):
             y = f.subs([(x, xi)])
             if(not is_error(e, y)): break
             xi = xi - y / df.subs([(x, xi)])
-
         return xi
 
     @staticmethod
@@ -47,7 +53,7 @@ class Util:
             @wraps(f)
             def wrapper(self, *args):
                 key = keygen(args)
-                if args in cached:
+                if key in cached:
                     result = encoder(cached[key])
                     if cached_hook: cached_hook(result)
                     return result
