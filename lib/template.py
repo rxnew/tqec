@@ -48,13 +48,11 @@ class Template:
 
     def __setup(self, type_name):
         json_object = self.load(type_name)
-
         self.type_name       = type_name
         self.pure_error_rate = json_object.get('error', 0.0)
         self.size            = json_object.get('size')
         self.circuit         = json_object.get('circuit', {})
         self.inners          = [] # (inner, count)
-
         self.__set_inners(self.__collect_inners())
 
     @Util.cache(encoder=InnerModule.load, decoder=lambda arg: arg.id)

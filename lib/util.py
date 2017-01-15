@@ -39,18 +39,20 @@ class Util:
         return xi
 
     @staticmethod
-    def cache(encoder=lambda arg: arg, decoder=lambda arg: arg, cached_hook=None):
+    def cache(encoder=lambda arg: arg, decoder=lambda arg: arg,
+              keygen=lambda arg: arg, cached_hook=None):
         def decorator(f):
             cached = {}
 
             @wraps(f)
             def wrapper(self, *args):
+                key = keygen(args)
                 if args in cached:
-                    result = encoder(cached[args])
+                    result = encoder(cached[key])
                     if cached_hook: cached_hook(result)
                     return result
                 result = f(self, *args)
-                cached[args] = decoder(result)
+                cached[key] = decoder(result)
                 return result
 
             return wrapper
@@ -92,13 +94,3 @@ class Util:
         def wrapper(*args):
             return f(*args)
         return wrapper
-
-    @staticmethod
-    def progressbar(progress):
-        END = 170
-        MAX_LEN = 30
-        BAR_LEN = int(MAX_LEN * progress)
-        return ('[' + '=' * BAR_LEN +
-                ('>' if BAR_LEN < MAX_LEN else '') +
-                ' ' * (MAX_LEN - BAR_LEN) +
-                '] %.1f%%' % (progress * 100.))
