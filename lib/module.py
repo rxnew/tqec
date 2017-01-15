@@ -202,7 +202,11 @@ class Module:
         modules = self.__make_optimization_modules()
 
         with tempfile.NamedTemporaryFile('w') as fp:
-            json.dump({'modules': modules, 'error_threshold': permissible_error_rate}, fp)
+            json.dump({
+                'modules'        : modules,
+                'error_threshold': permissible_error_rate
+            }, fp)
+
             fp.flush()
             result = self.__exec_subproccess('optimization', fp.name)
 
@@ -235,8 +239,8 @@ class Module:
         rectangles, inner_ids = self.__make_placement_rectangles()
 
         # マージンを考慮
-        max_inner_size = [max_inner_size[i] + self.inner_margin[i] for i in range(3)]
-        ac_size        = [self.__ac_size[i] + self.ac_margin[i]    for i in range(3)]
+        max_inner_size = [max_inner_size[i] + self.inner_margin[i] * 2 for i in range(3)]
+        ac_size        = [self.__ac_size[i] + self.ac_margin[i]        for i in range(3)]
 
         # Y軸方向のストリップパッキング
         base = self.__make_placement_base_y(max_inner_size, ac_size)
@@ -277,10 +281,11 @@ class Module:
         antigoglin_position = [-sys.maxsize for i in range(3)]
 
         for rectangle in rectangles:
+            size = rectangle['size']
             for i in range(3):
                 n = rectangle['position'][i]
                 position[i]            = min(position[i], n)
-                antigoglin_position[i] = max(antigoglin_position[i], rectangle['size'][i] + n)
+                antigoglin_position[i] = max(antigoglin_position[i], size[i] + n)
 
         size = [antigoglin_position[i] - position[i] for i in range(3)]
 
@@ -291,7 +296,8 @@ class Module:
         inner_ids = []
 
         for inner in self.inners:
-            rectangle = {'size': [inner.size[i] + self.inner_margin[i] for i in range(3)]}
+            size =  [inner.size[i] + self.inner_margin[i] * 2 for i in range(3)]
+            rectangle = {'size': size}
             for i in range(inner.count + inner.spare_count):
                 rectangles.append(rectangle)
                 inner_ids.append(inner.id)
@@ -321,7 +327,9 @@ class Module:
 
     def __set_inners_positions(self, rectangles, inner_ids):
         for rectangle, id in zip(rectangles, inner_ids):
-            self.get_inner(id).positions.append(rectangle['position'])
+            self.get_inner(id).positions.append([
+                rectangle['position'][i] + self.inner_margin[i] for i in range(3)
+            ])
 
     def __set_bits(self):
         # テスト

@@ -6,7 +6,7 @@ from util import Util
 import json
 import sympy
 
-from collections import defaultdict, OrderedDict
+from collections import OrderedDict
 from functools import reduce
 
 class Template:
@@ -31,12 +31,20 @@ class Template:
         return json_object
 
     @Util.encode_dagger
-    @Util.cache()
+    @Util.cache(cached_hook=lambda obj: setattr(obj, '_Template__setup', Util.nop))
     def __new__(cls, type_name):
-        if not type_name: return None
         return super().__new__(cls)
 
     def __init__(self, type_name):
+        self.__setup(type_name)
+
+    def deploy(self, permissible_error_rate, permissible_size):
+        return self.__deploy(self.type_name, permissible_error_rate, permissible_size)
+
+    def is_elementary(self):
+        return not self.inners
+
+    def __setup(self, type_name):
         json_object = self.load(type_name)
 
         self.type_name       = type_name
@@ -47,31 +55,25 @@ class Template:
 
         self.__set_inners(self.__collect_inners())
 
-    def deploy(self, permissible_error_rate, permissible_size):
-        return self.__deploy(self.type_name, permissible_error_rate, permissible_size)
-
-    def is_elementary(self):
-        return not self.inners
-
     @Util.cache(encoder=InnerModule.load, decoder=lambda arg: arg.id)
     def __deploy(self, type_name, *constraints):
         inner_modules = self.__deploy_inners(*constraints)
         module = Module(self, inner_modules, *constraints)
         module.dump()
-        inner_module = InnerModule(module)
-        return inner_module
+        return InnerModule(module)
 
     def __collect_inners(self):
         initializations = self.circuit['initializations']
         operations = self.circuit['operations']
-        inners = defaultdict(int)
+        counts = OrderedDict()
 
         for elements in [initializations, operations]:
             for element in elements:
                 if element['type'] == 'pin':
-                    inners[element['module']] += 1
+                    module = element['module']
+                    counts[module] = counts.get(module, 0) + 1
 
-        return [{'type': key, 'number': value} for key, value in inners.items()]
+        return [{'type': key, 'number': value} for key, value in counts.items()]
 
     def __set_inners(self, inners):
         pure_success_rate = 1.0 - self.pure_error_rate
@@ -79,7 +81,6 @@ class Template:
         for inner in inners:
             inner_type = inner['type']
             inner_count = inner['number']
-            if not inner_type: continue
             inner = Template(inner_type)
             self.inners.append((inner, inner_count))
             pure_success_rate *= pow(1.0 - inner.pure_error_rate, inner_count)

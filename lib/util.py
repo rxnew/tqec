@@ -4,6 +4,10 @@ from functools import wraps
 
 class Util:
     @staticmethod
+    def nop(*args):
+        pass
+
+    @staticmethod
     def combination(n, k):
         k = min(k, n - k)
         result = type(n)(1)
@@ -32,13 +36,16 @@ class Util:
         return xi
 
     @staticmethod
-    def cache(encoder=lambda arg: arg, decoder=lambda arg: arg):
+    def cache(encoder=lambda arg: arg, decoder=lambda arg: arg, cached_hook=None):
         def decorator(f):
             cached = {}
 
             @wraps(f)
             def wrapper(self, *args):
-                if args in cached: return encoder(cached[args])
+                if args in cached:
+                    result = encoder(cached[args])
+                    if cached_hook: cached_hook(result)
+                    return result
                 result = f(self, *args)
                 cached[args] = decoder(result)
                 return result
