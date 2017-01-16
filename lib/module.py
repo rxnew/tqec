@@ -17,7 +17,7 @@ from collections import OrderedDict
 
 # ac: algorithmic circuit
 class Module:
-    dump_directory_path = './'
+    dump_directory_path = '.'
     file_name_prefix    = 'module_'
     inner_margin        = [2, 2, 2]
     ac_margin           = [0, 2, 0]
@@ -40,7 +40,7 @@ class Module:
     @classmethod
     @Util.decode_dagger
     def make_file_name(cls, id):
-        return cls.dump_directory_path + cls.file_name_prefix + id + '.json'
+        return cls.dump_directory_path + '/' + cls.file_name_prefix + id + '.json'
 
     @classmethod
     def __exec_subproccess(cls, command_key, file_name):
