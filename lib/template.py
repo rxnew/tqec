@@ -14,10 +14,11 @@ class Template:
     data_directory_path = './data/templates/'
     __module_count = 0
 
+    @classmethod
     @Util.encode_dagger
     @Util.cache()
     def get_instance(cls, type_name):
-        return Template(type_name)
+        return cls(type_name)
 
     @classmethod
     @Util.decode_dagger
