@@ -8,10 +8,6 @@ from functools import wraps
 
 class Util:
     @staticmethod
-    def nop(*args):
-        pass
-
-    @staticmethod
     def significant_figure(n, k):
         d = Decimal(n)
         r = '.' + '0' * (k - 1)
@@ -46,13 +42,13 @@ class Util:
 
     @staticmethod
     def cache(encoder=lambda arg: arg, decoder=lambda arg: arg,
-              keygen=lambda arg: arg, cached_hook=None):
+              keygen=lambda *args: args, cached_hook=None):
         def decorator(f):
             cached = {}
 
             @wraps(f)
             def wrapper(self, *args):
-                key = keygen(args)
+                key = keygen(*args)
                 if key in cached:
                     result = encoder(cached[key])
                     if cached_hook: cached_hook(result)

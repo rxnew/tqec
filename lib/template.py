@@ -54,6 +54,7 @@ class Template:
         self.circuit         = json_object.get('circuit', {})
         self.inners          = [] # (inner, count)
         self.__set_inners(self.__collect_inners())
+        Template.__count += 1
 
     def deploy(self, permissible_error_rate, permissible_size):
         return self.__deploy(self.type_name, permissible_error_rate, permissible_size)
@@ -62,7 +63,7 @@ class Template:
         return not self.inners
 
     @Util.cache(encoder=InnerModule.load, decoder=lambda arg: arg.id,
-                keygen=lambda args:
+                keygen=lambda *args:
                 (args[0], Util.significant_figure(args[1], 2), args[2]))
     def __deploy(self, type_name, *constraints):
         inner_modules = self.__deploy_inners(*constraints)
@@ -97,7 +98,6 @@ class Template:
             pure_success_rate *= pow(1.0 - inner.pure_error_rate, inner_count)
 
         self.pure_error_rate = 1.0 - pure_success_rate
-        Template.__count += 1
 
     # 同一テンプレートから異なるモジュールを生成しない場合
     @Util.non_elementary([])
