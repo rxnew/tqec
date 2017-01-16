@@ -12,7 +12,9 @@ from functools import reduce
 
 class Template:
     data_directory_path = './data/templates/'
-    __module_count = 0
+
+    __count = 0
+    __deployed_count = 0
 
     @classmethod
     @Util.encode_dagger
@@ -38,6 +40,12 @@ class Template:
 
         return json_object
 
+    @classmethod
+    def __print_deployment_status(cls, module_id):
+        message = "[%s%%] \033[94mCompleted '%s'\033[0m"
+        progress = '{0:3d}'.format(int(float(cls.__deployed_count) / cls.__count * 100))
+        print(message % (progress, module_id))
+
     def __init__(self, type_name):
         json_object = self.load(type_name)
         self.type_name       = type_name
@@ -60,7 +68,9 @@ class Template:
         inner_modules = self.__deploy_inners(*constraints)
         module = Module(self, inner_modules, *constraints)
         module.dump()
-        logging.info('Completed to dump the module "%s"', module.id)
+        #logging.info('Completed to dump the module "%s"', module.id)
+        Template.__deployed_count += 1
+        self.__print_deployment_status(module.id)
         return InnerModule(module)
 
     def __collect_inners(self):
@@ -87,6 +97,7 @@ class Template:
             pure_success_rate *= pow(1.0 - inner.pure_error_rate, inner_count)
 
         self.pure_error_rate = 1.0 - pure_success_rate
+        Template.__count += 1
 
     # 同一テンプレートから異なるモジュールを生成しない場合
     @Util.non_elementary([])
