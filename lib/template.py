@@ -13,8 +13,8 @@ from functools import reduce
 class Template:
     data_directory_path = './data/templates/'
 
-    __count = 0
-    __deployed_count = 0
+    __counter          = 0
+    __deployed_counter = 0
 
     @classmethod
     @Util.encode_dagger
@@ -26,24 +26,21 @@ class Template:
     @Util.decode_dagger
     def load(cls, type_name):
         file_name = cls.data_directory_path + type_name.lower() + '.json'
-
         try:
             fp = open(file_name, 'r')
         except IOError:
             # ゲート変換データベースによる分解
             #cls.decompose()
             pass
-
         json_object = json.load(fp, object_pairs_hook=OrderedDict)
         Converter.complement_icpm(json_object)
         fp.close()
-
         return json_object
 
     @classmethod
     def __print_deployment_status(cls, module_id):
         message = "[%s%%] \033[94mCompleted '%s'\033[0m"
-        progress = '{0:3d}'.format(int(float(cls.__deployed_count) / cls.__count * 100))
+        progress = '{0:3d}'.format(int(float(cls.__deployed_counter) / cls.__counter * 100))
         print(message % (progress, module_id))
 
     def __init__(self, type_name):
@@ -54,7 +51,7 @@ class Template:
         self.circuit         = json_object.get('circuit', {})
         self.inners          = [] # (inner, count)
         self.__set_inners(self.__collect_inners())
-        Template.__count += 1
+        Template.__counter += 1
 
     def deploy(self, permissible_error_rate, permissible_size):
         return self.__deploy(self.type_name, permissible_error_rate, permissible_size)
@@ -70,7 +67,7 @@ class Template:
         module = Module(self, inner_modules, *constraints)
         module.dump()
         #logging.info('Completed to dump the module "%s"', module.id)
-        Template.__deployed_count += 1
+        Template.__deployed_counter += 1
         self.__print_deployment_status(module.id)
         return InnerModule(module)
 
