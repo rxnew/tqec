@@ -124,13 +124,11 @@ class Module:
 
     def __calculate_ac_length(self):
         circuit_length = 0
-
         for operation_step in self.circuit['operations']:
             if not isinstance(operation_step, list):
                 operation_step = [operation_step]
 
             step_length = 0
-
             for operation in operation_step:
                 operation_type = operation['type'].lower()
                 if operation_type == 'cnot':
@@ -139,7 +137,6 @@ class Module:
                     step_length = max(step_length, self.pin_length)
 
             circuit_length += step_length
-
         return circuit_length
 
     # TODO: connectionを考慮
