@@ -19,6 +19,14 @@ class Converter:
             ))
 
     @classmethod
+    def to_tqec(cls, json_object):
+        if json_object['format'] == 'icm':
+            return OrderedDict((
+                ('format' , 'tqec'),
+                ('circuit', cls.icm_to_tqec(json_object['circuit']))
+            ))
+
+    @classmethod
     def qc_to_icpm(cls, qc_circuit):
         return QcToIcpmConverter.convert(qc_circuit)
 
@@ -27,8 +35,12 @@ class Converter:
         return IcpmToQcConverter.convert(icpm_circuit)
 
     @classmethod
+    def icm_to_tqec(cls, icm_circuit):
+        return IcmToTqecConverter.convert(icm_circuit)
+
+    @classmethod
     def icpm_to_tqec(cls, icpm_circuit):
-        return IcpmToTqecConverter(icpm_circuit)
+        return IcpmToTqecConverter.convert(icpm_circuit)
 
     @classmethod
     def complement(cls, json_object):
@@ -203,23 +215,28 @@ class IcpmToQcConverter:
 class IcmToTqecConverter:
     @classmethod
     def convert(cls, icm_circuit):
+        icm_bits            = icm_circuit.get('bits', [])
+        icm_inputs          = icm_circuit.get('inputs', [])
+        icm_outputs         = icm_circuit.get('outputs', [])
         icm_initializations = icm_circuit.get('initializations', [])
         icm_measurements    = icm_circuit.get('measurements', [])
         icm_cnots           = icm_circuit.get('cnots', [])
         bit_length          = cls.__calculate_bit_length(icm_cnots)
 
         logical_qubits = cls.__convert_bits(icm_bits, bit_length)
-        logical_qubits = cls.__convert_initializations(icm_initialization, logical_qubits)
-        logical_qubits = cls.__convert_measurement(icm_measurements, bit_length, logical_qubits)
+        logical_qubits = cls.__convert_inputs(icm_inputs, logical_qubits)
+        logical_qubits = cls.__convert_outputs(icm_outputs, bit_length, logical_qubits)
+        logical_qubits = cls.__convert_initializations(icm_initializations, logical_qubits)
+        logical_qubits = cls.__convert_measurements(icm_measurements, bit_length, logical_qubits)
         logical_qubits = cls.__convert_cnots(icm_cnots, logical_qubits)
 
-        return OrderedDict((
+        return OrderedDict([
             ('logical_qubits', logical_qubits)
-        ))
+        ])
 
     @classmethod
     def __calculate_bit_length(cls, icm_cnots):
-        return len(icm_cnots) * 4
+        return len(icm_cnots) << 2
 
     @classmethod
     def __convert_bits(cls, icm_bits, bit_length):
@@ -227,22 +244,36 @@ class IcmToTqecConverter:
         return [cls.__convert_bit(icm_bit, bit_length) for icm_bit in icm_bits]
 
     @classmethod
-    def __convert_initializations(cls, icm_initializations, logical_qubits):
-        return [cls.__convert_initialization(icm_initialization, logical_qubits)
-                for icm_initialization in icm_initializations]
+    def __convert_inputs(cls, icm_inputs, logical_qubits):
+        for icm_input in icm_inputs:
+            cls.__convert_input(icm_input, logical_qubits)
+        return logical_qubits
 
     @classmethod
-    def __convert_measurements(cls, icm_measurements, logical_qubits, bit_length):
-        return [cls.__convert_measurement(icm_measurement, logical_qubits, bit_length)
-                for icm_measurement in icm_measurements]
+    def __convert_outputs(cls, icm_outputs, bit_length, logical_qubits):
+        for icm_output in icm_outputs:
+            cls.__convert_output(icm_output, bit_length, logical_qubits)
+        return logical_qubits
+
+    @classmethod
+    def __convert_initializations(cls, icm_initializations, logical_qubits):
+        for icm_initialization in icm_initializations:
+            cls.__convert_initialization(icm_initialization, logical_qubits)
+        return logical_qubits
+
+    @classmethod
+    def __convert_measurements(cls, icm_measurements, bit_length, logical_qubits):
+        for icm_measurement in icm_measurements:
+            cls.__convert_measurement(icm_measurement, bit_length, logical_qubits)
+        return logical_qubits
 
     @classmethod
     def __convert_cnots(cls, icm_cnots, logical_qubits):
-        return logical_qubits.extend([
+        return logical_qubits + [
             logical_qubit
-            for logical_qubit in cls.__convert_cnot_step(icm_cnot_step, logical_qubits, step)
             for step, icm_cnot_step in enumerate(icm_cnots)
-        ])
+            for logical_qubit in cls.__convert_cnot_step(icm_cnot_step, step, logical_qubits)
+        ]
 
     @classmethod
     def __convert_bit(cls, icm_bit, bit_length):
@@ -261,26 +292,40 @@ class IcmToTqecConverter:
         ))
 
     @classmethod
+    def __convert_input(cls, icm_input, logical_qubits):
+        index = cls.__find_index_of_logical_qubits(icm_input, logical_qubits)
+        x = icm_input << 1
+        block = [[x, 0, 0], [x, 2, 0]]
+        logical_qubits[index]['caps'].append(block)
+
+    @classmethod
+    def __convert_output(cls, icm_output, bit_length, logical_qubits):
+        index = cls.__find_index_of_logical_qubits(icm_output, logical_qubits)
+        x = icm_output << 1
+        block = [[x, 0, bit_length], [x, 2, bit_length]]
+        logical_qubits[index]['caps'].append(block)
+
+    @classmethod
     def __convert_initialization(cls, icm_initialization, logical_qubits):
         initialization_type = icm_initialization['type'].lower()
         initialization_bit  = icm_initialization['bit']
         index = cls.__find_index_of_logical_qubits(initialization_bit, logical_qubits)
+        x = initialization_bit << 1
+        block = [[x, 0, 0], [x, 2, 0]]
         if initialization_type == 'z':
-            x = initialization_bit << 1
-            block = [[x, 0, 0], [x, 2, 0]]
             logical_qubits[index]['blocks'].append(block)
-        return logical_qubits[index]
+        elif initialization_type != 'x':
+            logical_qubits[index]['injectors'].append(block)
 
     @classmethod
     def __convert_measurement(cls, icm_measurement, bit_length, logical_qubits):
-        mesurement_type = icm_mesurement['type'].lower()
-        mesurement_bit  = icm_mesurement['bit']
-        index = cls.__find_index_of_logical_qubits(mesurement_bit, logical_qubits)
-        if mesurement_type == 'z':
-            x = mesurement_bit << 1
+        measurement_type = icm_measurement['type'].lower()
+        measurement_bit  = icm_measurement['bit']
+        index = cls.__find_index_of_logical_qubits(measurement_bit, logical_qubits)
+        if measurement_type == 'z':
+            x = measurement_bit << 1
             block = [[x, 0, bit_length], [x, 2, bit_length]]
             logical_qubits[index]['blocks'].append(block)
-        return logical_qubits[index]
 
     @classmethod
     def __convert_cnot_step(cls, icm_cnot_step, step, logical_qubits):
@@ -304,20 +349,20 @@ class IcmToTqecConverter:
     @classmethod
     def __update_braiding_control_bit(cls, bit, step, logical_qubits):
         x = bit << 1
-        z = step << 2 - 2
+        z = (step << 2) + 2
         block = [[x, 0, z], [x, 2, z]]
         index = cls.__find_index_of_logical_qubits(bit, logical_qubits)
         logical_qubits[index]['blocks'].append(block)
 
     @classmethod
-    def __make_braiding_blocks(cls, contol_bit, target_bits, step):
+    def __make_braiding_blocks(cls, control_bit, target_bits, step):
         from copy import deepcopy
 
-        bits = sorted([control_bit] + icm_cnot['targets'])
-        up = (bits[0] == control_bit)
-        x = bits[0] << 1 - 1
+        bits = sorted([control_bit] + target_bits)
+        up = (bits[0] != control_bit)
+        x = (bits[0] << 1) - 1
         y = 3 if up else 1
-        z = step << 2 - 3
+        z = (step << 2) + 1
         position = [x, y, z]
         blocks = [deepcopy(position)]
         direct = -1
@@ -327,12 +372,15 @@ class IcmToTqecConverter:
                 if position_a[i] != position_b[i]: return i
 
         def update_blocks():
+            nonlocal direct
             current_direct = get_direct(blocks[-1], position)
-            if direct == -1 or current_direct != direct:
-                blocks.append(deepcopy(position))
-                direct = current_direct
+            if current_direct == direct:
+                blocks.pop()
+            blocks.append(deepcopy(position))
+            direct = current_direct
 
         def toggle_up():
+            nonlocal up
             if up:
                 position[1] -= 2
                 up = False
@@ -341,7 +389,7 @@ class IcmToTqecConverter:
                 up = True
             update_blocks()
 
-        for bit in range(bits[0], bits[-1]):
+        for bit in range(bits[0], bits[-1] + 1):
             if bit in bits:
                 if up: toggle_up()
             else:
@@ -354,7 +402,7 @@ class IcmToTqecConverter:
         position[2] += 2
         update_blocks()
 
-        for bit in reversed(range(bits[0], bits[-1])):
+        for bit in reversed(range(bits[0], bits[-1] + 1)):
             if bit == control_bit:
                 if up: toggle_up()
             else:
@@ -365,7 +413,7 @@ class IcmToTqecConverter:
         position[2] -= 2
         update_blocks()
 
-        return blocks
+        return [blocks]
 
     @classmethod
     def __find_index_of_logical_qubits(cls, id, logical_qubits):
