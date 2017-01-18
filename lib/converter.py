@@ -221,8 +221,8 @@ class IcmToTqecConverter:
         icm_initializations = icm_circuit.get('initializations', [])
         icm_measurements    = icm_circuit.get('measurements', [])
         icm_cnots           = icm_circuit.get('cnots', [])
-        bit_length          = cls.__calculate_bit_length(icm_cnots)
 
+        bit_length     = cls.__calculate_bit_length(icm_cnots)
         logical_qubits = cls.__convert_bits(icm_bits, bit_length)
         logical_qubits = cls.__convert_inputs(icm_inputs, logical_qubits)
         logical_qubits = cls.__convert_outputs(icm_outputs, bit_length, logical_qubits)
@@ -322,10 +322,15 @@ class IcmToTqecConverter:
         measurement_type = icm_measurement['type'].lower()
         measurement_bit  = icm_measurement['bit']
         index = cls.__find_index_of_logical_qubits(measurement_bit, logical_qubits)
+        x = measurement_bit << 1
+        block = [[x, 0, bit_length], [x, 2, bit_length]]
         if measurement_type == 'z':
-            x = measurement_bit << 1
-            block = [[x, 0, bit_length], [x, 2, bit_length]]
             logical_qubits[index]['blocks'].append(block)
+        elif measurement_type == 'x/z' or measurement_type == 'z/x':
+            logical_qubits[index]['blocks'].append(OrderedDict((
+                ('vertices', block),
+                ('visual'  , {'transparent': True})
+            )))
 
     @classmethod
     def __convert_cnot_step(cls, icm_cnot_step, step, logical_qubits):

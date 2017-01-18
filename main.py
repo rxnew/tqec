@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 
-__doc__ = """{f}
-
+__doc__ = """
 Usage:
     {f} [-t | --type <type>] [-e | --error <error>] [-s | --size <size>]
     {f} convert <format> <file>
@@ -14,7 +13,6 @@ Options:
     <format>           output file format
     <file>             input file
     -h --help          show this screen and exit
-
 """.format(f=__file__)
 
 import os
