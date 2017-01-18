@@ -1,0 +1,181 @@
+{
+    "format": "icm",
+    "circuit": {
+        "bits"   : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+        "inputs" : [],
+        "outputs": [0],
+        "initializations": [
+            {
+                "bit" : 0,
+                "type": "x"
+            },
+            {
+                "bit" : 1,
+                "type": "y"
+            },
+            {
+                "bit" : 2,
+                "type": "x"
+            },
+            {
+                "bit" : 3,
+                "type": "y"
+            },
+            {
+                "bit" : 4,
+                "type": "x"
+            },
+            {
+                "bit" : 5,
+                "type": "y"
+            },
+            {
+                "bit" : 6,
+                "type": "z"
+            },
+            {
+                "bit" : 7,
+                "type": "y"
+            },
+            {
+                "bit" : 8,
+                "type": "x"
+            },
+            {
+                "bit" : 9,
+                "type": "y"
+            },
+            {
+                "bit" : 10,
+                "type": "z"
+            },
+            {
+                "bit" : 11,
+                "type": "y"
+            },
+            {
+                "bit" : 12,
+                "type": "z"
+            },
+            {
+                "bit" : 13,
+                "type": "y"
+            },
+            {
+                "bit" : 14,
+                "type": "z"
+            }
+        ],
+        "measurements": [
+            {
+                "bit" : 1,
+                "type": "x"
+            },
+            {
+                "bit" : 2,
+                "type": "x"
+            },
+            {
+                "bit" : 3,
+                "type": "x"
+            },
+            {
+                "bit" : 4,
+                "type": "x"
+            },
+            {
+                "bit" : 5,
+                "type": "x"
+            },
+            {
+                "bit" : 6,
+                "type": "x"
+            },
+            {
+                "bit" : 7,
+                "type": "x"
+            },
+            {
+                "bit" : 8,
+                "type": "x"
+            },
+            {
+                "bit" : 9,
+                "type": "x"
+            },
+            {
+                "bit" : 10,
+                "type": "x"
+            },
+            {
+                "bit" : 11,
+                "type": "x"
+            },
+            {
+                "bit" : 12,
+                "type": "x"
+            },
+            {
+                "bit" : 13,
+                "type": "x"
+            },
+            {
+                "bit" : 14,
+                "type": "x"
+            }
+
+        ],
+        "cnots": [
+            {
+                "controls": [0],
+                "targets" : [6]
+            },
+            {
+                "controls": [6],
+                "targets" : [10, 12]
+            },
+            {
+                "controls": [8],
+                "targets" : [10, 12, 14]
+            },
+            {
+                "controls": [4],
+                "targets" : [6, 12, 14]
+            },
+            {
+                "controls": [2],
+                "targets" : [6, 10, 14]
+            },
+            [
+                {
+                    "controls": [1],
+                    "targets" : [2]
+                },
+                {
+                    "controls": [3],
+                    "targets" : [4]
+                },
+                {
+                    "controls": [5],
+                    "targets" : [6]
+                },
+                {
+                    "controls": [7],
+                    "targets" : [8]
+                },
+                {
+                    "controls": [9],
+                    "targets" : [10]
+                },
+                {
+                    "controls": [11],
+                    "targets" : [12]
+                },
+                {
+                    "controls": [13],
+                    "targets" : [14]
+                }
+            ]
+        ]
+    }
+}

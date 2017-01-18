@@ -1,41 +1,63 @@
 from module import Module
 
 import json
+
 from collections import OrderedDict
+from functools import reduce
 
 class InnerModule:
     @classmethod
     def load(cls, id):
-        if not id:
-            return None
-
-        file_name = Module.get_file_name(id)
+        file_name = Module.make_file_name(id)
 
         with open(file_name, 'r') as fp:
-            raw = json.load(fp)
+            json_object = json.load(fp)
 
         return InnerModule(
-            type('RawModule', (), {
-                'id'        : raw['id'],
-                'size'      : raw['size'],
-                'error_rate': raw['error'],
-                'elements'  : type('RawElements', (), {
-                    'bits'   : raw['elements']['bits'],
-                    'inputs' : raw['elements']['inputs'],
-                    'outputs': raw['elements']['outputs']
-                })
+            type('InnerModuleType', (), {
+                'id'        : json_object['id'],
+                'type_name' : json_object['type'],
+                'size'      : json_object['size'],
+                'error_rate': json_object['error'],
+                'circuit'   : {
+                    'inputs' : json_object['circuit']['inputs'],
+                    'outputs': json_object['circuit']['outputs']
+                }
             })
         )
 
     def __init__(self, module):
         self.id          = module.id
+        self.type_name   = module.type_name
         self.size        = module.size
         self.error_rate  = module.error_rate
-        self.bits        = module.elements.bits
-        self.inputs      = module.elements.inputs
-        self.outputs     = module.elements.outputs
+        self.circuit     = {
+            'inputs':  module.circuit['inputs'],
+            'outputs': module.circuit['outputs']
+        }
         self.count       = 1
         self.spare_count = 0
+        self.positions   = []
+
+    def to_output_format(self):
+        return [
+            OrderedDict((
+                ('id'      , self.id),
+                ('size'    , self.size),
+                ('position', position)
+            ))
+            for position in self.positions
+        ]
+
+    def to_optimization_format(self):
+        return {
+            'cost'  : self.cost(),
+            'error' : self.error_rate,
+            'number': self.count
+        }
+
+    def cost(self):
+        return reduce(lambda x, y: x * y, self.size)
 
     def get_input_positions(self):
         return [self.get_raw_io_format(input, 0) for input in self.inputs]
@@ -52,10 +74,3 @@ class InnerModule:
         bit_position_x = bit['range'][either]
 
         return (bit_id, [[bit_position_x, bit_id, 0], [bit_position_x, bit_id, 1]])
-
-    def get_raw(self):
-        return OrderedDict((
-            ('id'    , self.id),
-            ('size'  , self.size),
-            ('number', self.count + self.spare_count)
-        ))

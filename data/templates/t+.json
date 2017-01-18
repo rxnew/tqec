@@ -35,19 +35,19 @@
             },
             {
                 "bit" : 1,
-                "type": "z/x"
+                "type": "x/z"
             },
             {
                 "bit" : 2,
-                "type": "x/z"
+                "type": "z/x"
             },
             {
                 "bit" : 3,
-                "type": "x/z"
+                "type": "z/x"
             },
             {
                 "bit" : 4,
-                "type": "z/x"
+                "type": "x/z"
             }
         ],
         "operations": [
