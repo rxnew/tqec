@@ -1,6 +1,7 @@
 {
     "error" : 0.1,
-    "elements": {
+    "size"  : [20, 20, 20],
+    "circuit": {
         "outputs": [
             {
                 "id": 0,

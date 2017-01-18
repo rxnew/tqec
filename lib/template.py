@@ -1,147 +1,162 @@
-from elements import Elements
 from inner_module import InnerModule
 from module import Module
+from converter import Converter
 from util import Util
 
 import json
+import logging
 import sympy
 
+from collections import OrderedDict
 from functools import reduce
 
 class Template:
     data_directory_path = './data/templates/'
-    cache = {}
-    deployment_cache = {}
+
+    __counter          = 0
+    __deployed_counter = 0
 
     @classmethod
-    def get(cls, type_name):
-        if type_name in cls.cache:
-            return cls.cache[type_name]
-
-        template = Template(type_name)
-        cls.cache[type_name] = template
-
-        return template
+    @Util.encode_dagger
+    @Util.cache()
+    def get_instance(cls, type_name):
+        return cls(type_name)
 
     @classmethod
-    def get_raw(cls, type_name):
+    @Util.decode_dagger
+    def load(cls, type_name):
         file_name = cls.data_directory_path + type_name.lower() + '.json'
-
         try:
             fp = open(file_name, 'r')
         except IOError:
             # ゲート変換データベースによる分解
             #cls.decompose()
             pass
-
-        raw = json.load(fp)
+        json_object = json.load(fp, object_pairs_hook=OrderedDict)
+        Converter.complement_icpm(json_object)
         fp.close()
+        return json_object
 
-        return raw
-
-    def __new__(cls, type_name):
-        if not type_name:
-            return None
-        return super().__new__(cls)
+    @classmethod
+    def __print_deployment_status(cls, module_id):
+        message = "[%s%%] \033[94mCompleted '%s'\033[0m"
+        progress = '{0:3d}'.format(int(float(cls.__deployed_counter) / cls.__counter * 100))
+        print(message % (progress, module_id))
 
     def __init__(self, type_name):
-        raw = Template.get_raw(type_name)
+        json_object = self.load(type_name)
+        self.type_name       = type_name
+        self.pure_error_rate = json_object.get('error', 0.0)
+        self.size            = json_object.get('size')
+        self.circuit         = json_object.get('circuit', {})
+        self.inners          = [] # (inner, count)
+        self.__set_inners(self.__collect_inners())
+        Template.__counter += 1
 
-        self.type_name = type_name
-        self.pure_error_rate = raw.get('error', 0.0)
-        self.elements = Elements(raw.get('elements', {}))
-        self.inners = []
+    def deploy(self, permissible_error_rate, permissible_size):
+        return self.__deploy(self.type_name, permissible_error_rate, permissible_size)
 
-        self.set_inners(raw.get('elements', {}).get('templates', []))
+    def is_elementary(self):
+        return not self.inners
 
-    def set_inners(self, raw_inners):
+    @Util.cache(encoder=InnerModule.load, decoder=lambda arg: arg.id,
+                keygen=lambda *args:
+                (args[0], Util.significant_figure(args[1], 2), args[2]))
+    def __deploy(self, type_name, *constraints):
+        inner_modules = self.__deploy_inners(*constraints)
+        module = Module(self, inner_modules, *constraints)
+        module.dump()
+        #logging.info('Completed to dump the module "%s"', module.id)
+        Template.__deployed_counter += 1
+        self.__print_deployment_status(module.id)
+        return InnerModule(module)
+
+    def __collect_inners(self):
+        initializations = self.circuit['initializations']
+        operations = self.circuit['operations']
+        counts = OrderedDict()
+
+        for elements in [initializations, operations]:
+            for element in elements:
+                if element['type'] == 'pin':
+                    module = element['module']
+                    counts[module] = counts.get(module, 0) + 1
+
+        return [{'type': key, 'number': value} for key, value in counts.items()]
+
+    def __set_inners(self, inners):
         pure_success_rate = 1.0 - self.pure_error_rate
 
-        for raw_inner in raw_inners:
-            inner_type = raw_inner.get('type')
-            inner_count = raw_inner.get('number', 1)
-
-            if not inner_type:
-                continue
-
-            inner = Template.get(inner_type)
+        for inner in inners:
+            inner_type = inner['type']
+            inner_count = inner['number']
+            inner = self.get_instance(inner_type)
             self.inners.append((inner, inner_count))
             pure_success_rate *= pow(1.0 - inner.pure_error_rate, inner_count)
 
         self.pure_error_rate = 1.0 - pure_success_rate
 
-    def deploy(self, permissible_error_rate, permissible_size):
-        inner_module = self.deploy_from_cache(permissible_error_rate, permissible_size)
+    # 同一テンプレートから異なるモジュールを生成しない場合
+    @Util.non_elementary([])
+    def __deploy_inners(self, *constraints):
+        inner_modules = []
+        inner_args_func = self.__make_deployment_args_func(*constraints)
 
-        if inner_module:
-            return inner_module
-
-        inner_modules = self.deploy_inners(permissible_error_rate, permissible_size)
-        module = Module(self, inner_modules, permissible_error_rate, permissible_size)
-        module.dump()
-        self.cache_module_id(module.id, permissible_error_rate, permissible_size)
-        inner_module = InnerModule(module)
-
-        return inner_module
-
-    def deploy_from_cache(self, permissible_error_rate, permissible_size):
-        key = (self.type_name, permissible_error_rate, permissible_size)
-        module_id = Template.deployment_cache.get(key)
-        inner_module = InnerModule.load(module_id)
-
-        return inner_module
-
-    def deploy_inners(self, permissible_error_rate, permissible_size):
-        inner_modules = {}
-
-        if self.is_elementary():
-            return inner_modules
-
-        inner_args_func = self.create_inner_deployment_args_func(permissible_error_rate, \
-                                                                 permissible_size)
-
-        for (inner, inner_count) in self.inners:
-            (inner_permissible_error_rate, inner_permissible_size) = inner_args_func(inner)
-
-            for i in range(inner_count):
-                inner_module = inner.deploy(inner_permissible_error_rate, \
-                                            inner_permissible_size)
-
-                if inner_module.id in inner_modules:
-                    inner_modules[inner_module.id].count += 1
-                else:
-                    inner_modules[inner_module.id] = inner_module
+        for inner, inner_count in self.inners:
+            inner_constraints = inner_args_func(inner)
+            inner_module = inner.deploy(*inner_constraints)
+            inner_module.count = inner_count
+            inner_modules.append(inner_module)
 
         self.inners.clear()
-
         return inner_modules
 
-    def create_inner_deployment_args_func(self, permissible_error_rate, permissible_size):
-        assert(not self.is_elementary())
+    # 同一テンプレートから異なるモジュールを生成する可能性がある場合 (現在不使用)
+    @Util.non_elementary([])
+    def __deploy_inners_not_used(self, *constraints):
+        inner_modules_dict = {}
+        inner_args_func = self.__make_deployment_args_func(*constraints)
 
-        error_rate_func = self.create_permissible_error_rate_func(permissible_error_rate)
+        for inner, inner_count in self.inners:
+            inner_constraints = inner_args_func(inner)
 
-        def inner_deployment_args_func(inner):
+            for i in range(inner_count):
+                inner_module = inner.deploy(*inner_constraints)
+                if inner_module.id in inner_modules_dict:
+                    inner_modules_dict[inner_module.id].count += 1
+                else:
+                    inner_modules_dict[inner_module.id] = inner_module
+
+        self.inners.clear()
+        return list(inner_modules_dict.values())
+
+    def __make_deployment_args_func(self, permissible_error_rate, permissible_size):
+        error_rate_func = self.__make_permissible_error_rate_func(permissible_error_rate)
+
+        def make_deployment_args(inner):
             if inner.is_elementary():
-                return (inner.pure_error_rate, permissible_size)
+                return inner.pure_error_rate, permissible_size
 
             inner_permissible_error_rate = error_rate_func(inner.pure_error_rate)
-            # テスト
-            inner_permissible_size = permissible_size
+            # Y軸方向はアルゴリズミック回路の分だけ引く
+            inner_permissible_size = (
+                permissible_size[0],
+                permissible_size[1] - (2 + Module.ac_margin[1])
+            )
 
-            return (inner_permissible_error_rate, inner_permissible_size)
+            return inner_permissible_error_rate, inner_permissible_size
 
-        return inner_deployment_args_func
+        return make_deployment_args
 
-    def create_permissible_error_rate_func(self, permissible_error_rate):
+    def __make_permissible_error_rate_func(self, permissible_error_rate):
         # ニュートン法における許容誤差
         e = 0.00001
 
-        (m, x) = sympy.symbols('m x')
+        m, x = sympy.symbols('m x')
         f = -m * x + 1
 
         g = 1
-        for (inner, inner_count) in self.inners:
+        for inner, inner_count in self.inners:
             g *= f.subs([(x, inner.pure_error_rate)]) ** inner_count
         g -= 1 - permissible_error_rate
 
@@ -149,10 +164,3 @@ class Template:
         h = 1 - f.subs([(m, m0)])
 
         return lambda xi: float(h.subs([(x, xi)]))
-
-    def cache_module_id(self, module_id, permissible_error_rate, permissible_size):
-        key = (self.type_name, permissible_error_rate, permissible_size)
-        Template.deployment_cache[key] = module_id
-
-    def is_elementary(self):
-        return not self.inners

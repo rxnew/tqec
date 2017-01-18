@@ -1,47 +1,36 @@
-TQEC
+TQEC circuit generator
 ==============
-This program is ~.
+This program is a generator for TQEC (Topologically Quantum Error-collected) circuit.
 
 Requirements
 ---------------
-* g++ 4.9 or later
-* [CMake][cmake] 3.3 or later
+* g++ 6.3 or later
+* [CMake][cmake] 3.2 or later
 * Python 3.4 or later
-* LAPACK
-* BLAS
+* sympy
+* numpy
+* docopt
 
 How to build
 ---------------
 ```
 $ cd build
-$ cmake [-DCMAKE_BUILD_TYPE=(Debug|Release)] ..
+$ cmake ..
 $ make
 ```
 
 How to use
 ---------------
 ```
-# Try to merge gates in a circuit. Using esop minimization of ABC.
-# Default test data are blif or pla files in 'test_data' directory.
-$ ./main.py [*.(blif|pla)]
+# generate TQEC circuit modules from a icpm template circuit
+# the default circuit is 'cv'
+$ ./main.py [-t | --type <type>] [-e | --error <error>] [-s | --size <size>]
 
-# Try to merge gates in a circuit.
-# A default test data is 'test_data/alu4.esop'.
-$ ./bin/merging [*.(qo|esop)]
+# convert a json file format
+$ ./main.py convert <format> <file>
 
-# Show groups.
-# A default test data is 'test_data/alu4.esop'.
-$ ./bin/grouping [*.(qo|esop)]
-
-# Covert esop to qo and show number of gates.
-# A default test data is 'test_data/alu4.esop'.
-$ ./bin/esop_to_qo [*.esop]
-
-# Show circuit's cost.
-# A default test data is 'test_data/alu4.esop'.
-$ ./bin/print_cost [*.(qo|esop)]
+# show help
+$ ./main.py -h | --help
 ```
 
 [cmake]: https://cmake.org/
-[qc]: https://github.com/rxnew/qc
-[qc_ver]: https://github.com/rxnew/qc/releases/tag/v1.4.8.1
