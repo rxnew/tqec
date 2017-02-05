@@ -113,12 +113,12 @@ class Module:
     def is_regular(self):
         return self.geometry == None
 
-    def __init_regular(self, *constraints):
+    def __init_regular(self, permissible_error_rate, permissible_size):
         self.__prepare()
 
         self.__parallelize()
-        self.__place(*constraints)
-        self.__connect()
+        self.__place(permissible_error_rate, permissible_size)
+        self.__connect(permissible_size)
 
         # テスト用
         self.__set_size()
@@ -243,8 +243,8 @@ class Module:
         self.__set_switches()
         self.__set_inner_id_dict()
         self.__set_switch_id_dict()
-        self.__place_inners(permissible_size)
-        self.__place_switches(permissible_size)
+        self.__place_inners(Util.vector_add(permissible_size, [-4, -4]))
+        self.__place_switches(Util.vector_add(permissible_size, [-4, -4]))
 
     # 同一テンプレートから異なるモジュールを生成しない場合
     def __set_id_of_pins(self):
@@ -441,10 +441,10 @@ class Module:
                 for i in range(3)
             ])
 
-    def __connect(self):
+    def __connect(self, permissible_size):
+        region    = self.__scale_down(self.__make_connection_region(permissible_size))
         endpoints = self.__scale_down(self.__make_connection_endpoints())
-        obstacles = self.__scale_down(self.__make_connection_obstacles())
-        region    = self.__scale_down(self.__make_connection_region())
+        obstacles = self.__scale_down(self.__make_connection_obstacles(region))
 
         with tempfile.NamedTemporaryFile('w') as fp:
             json.dump({
@@ -456,8 +456,18 @@ class Module:
             fp.flush()
             result = self.__exec_subproccess('connection', fp.name)
 
-        #print(result)
         self.__connections = self.__scale_up(json.loads(result)['connections'])
+
+    def __make_connection_region(self, permissible_size):
+        # TODO: 許容サイズを考慮する
+        # self.__set_sizeと処理が被る
+        max_z = self.__ac_size[2]
+        for inner in self.inners + self.switches:
+            for position in inner.positions:
+                max_z = max(max_z, position[2] + inner.size[2])
+        size = [permissible_size[0], permissible_size[1], max_z + 20]
+        position = [-2, -2, -10]
+        return {'size': size, 'position': position}
 
     def __make_connection_endpoints(self):
         ac_direct_pins = defaultdict(list)
@@ -530,22 +540,25 @@ class Module:
                 endpoints.append([inner_switch_pins[id][i], switch_input_pins[type_name][i]])
         return endpoints
 
-    def __make_connection_obstacles(self):
+    def __make_connection_obstacles(self, region):
         obstacles = [{'size': self.__ac_size, 'position': [0, 0, 0]}]
         for inner in self.inners + self.switches:
             for position in inner.positions:
                 obstacles.append({'size': inner.size, 'position': position})
+        # inputの経路確保
+        for bit in self.circuit['inputs']:
+            x = bit << 1
+            z = region['position'][2]
+            for i in range(2):
+                obstacles.append({'size': [0, 0, -z], 'position': [x, i << 1, z]})
+        # outputの経路確保
+        for bit in self.circuit['outputs']:
+            x = bit << 1
+            z = self.__ac_size[2]
+            d = region['size'][2] + region['position'][2] - z
+            for i in range(2):
+                obstacles.append({'size': [0, 0, d], 'position': [x, i << 1, z]})
         return obstacles
-
-    def __make_connection_region(self):
-        # TODO: 許容サイズを考慮する
-        # self.__set_sizeと処理が被る
-        ac = {'size': self.__ac_size, 'position': [0, 0, 0]}
-        rectangles = self.to_output_format_inners() + [ac]
-        convex_hull = self.__calculate_convex_hull(rectangles)
-        size = Util.vector_add(convex_hull['size'], [4, 4, 20])
-        position = Util.vector_add(convex_hull['position'], [-2, -2, -10])
-        return {'size': size, 'position': position}
 
     def __scale(self, element, scaling):
         if isinstance(element, int):
