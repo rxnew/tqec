@@ -121,8 +121,8 @@ class Module:
         self.__connect(permissible_size)
 
         # テスト用
-        self.__set_size()
-        self.__set_geometry()
+        base_position = self.__set_size()
+        self.__set_geometry(base_position)
 
     def __init_non_regular(self):
         self.geometry['inputs']  = self.geometry.get('inputs' , [])
@@ -164,18 +164,59 @@ class Module:
     # TODO: connectionを考慮
     # TODO: -1の位置のCNOTの扱い
     def __set_size(self):
-        ac = {'size': self.__ac_size, 'position': [0, 0, 0]}
-        rectangles = self.to_output_format_inners() + [ac]
+        ac_region = {'size': self.__ac_size, 'position': [0, 0, 0]}
+        connection_region = self.__calculate_connection_region()
+        rectangles = self.to_output_format_inners() + [ac_region, connection_region]
         convex_hull = self.__calculate_convex_hull(rectangles)
         self.size = convex_hull['size']
-        self.__update_positions(convex_hull['position'])
+        return convex_hull['position']
 
-    def __set_geometry(self):
+    def __calculate_connection_region(self):
+        from operator import sub
+        min_position, max_position = self.__find_connection_min_max_position()
+        return {
+            'size'    : list(map(sub, max_position, min_position)),
+            'position': min_position
+        }
+
+    def __find_connection_min_max_position(self):
+        if len(self.__connections) == 0: return 0, 0
+        min_position = [sys.maxsize for i in range(3)]
+        max_position = [0 for i in range(3)]
+        for connection in self.__connections:
+            for position in connection:
+                min_position = list(map(min, min_position, position))
+                max_position = list(map(max, max_position, position))
+        return min_position, max_position
+
+    def __set_geometry(self, base_position):
         self.geometry = Converter.icpm_to_tqec(self.circuit)
-        self.geometry['logical_qubits'].extend(self.__make_geometry_connections())
         self.geometry['modules'] = self.to_output_format_inners()
-        self.geometry['inputs']  = self.__make_geometry_inputs()
-        self.geometry['outputs'] = self.__make_geometry_outpus()
+        self.geometry['inputs']  = self.__make_geometry_inputs(base_position[2])
+        self.geometry['outputs'] = self.__make_geometry_outpus(base_position[2])
+        self.geometry['logical_qubits'].extend(self.__make_geometry_connections())
+        self.__update_positions(base_position)
+
+    def __make_geometry_inputs(self, base_z):
+        inputs = []
+        for bit in self.circuit['inputs']:
+            x = bit << 1
+            inputs.append(OrderedDict((
+                ('id'       , bit),
+                ('positions', [[x, 0, base_z], [x, 2, base_z]])
+            )))
+        return inputs
+
+    def __make_geometry_outpus(self, base_z):
+        outputs = []
+        for bit in self.circuit['outputs']:
+            x = bit << 1
+            z = self.size[2] + base_z
+            outputs.append(OrderedDict((
+                ('id'       , bit),
+                ('positions', [[x, 0, z], [x, 2, z]])
+            )))
+        return outputs
 
     def __make_geometry_connections(self):
         logical_qubits = []
@@ -197,30 +238,68 @@ class Module:
             max_id = max(max_id, logical_qubit['id'])
         return max_id
 
-    def __make_geometry_inputs(self):
-        inputs = []
-        for bit in self.circuit['inputs']:
-            x = bit << 1
-            inputs.append(OrderedDict((
-                ('id'       , bit),
-                ('positions', [[x, 0, 0], [x, 2, 0]])
-            )))
-        return inputs
-
-    def __make_geometry_outpus(self):
-        outputs = []
-        for bit in self.circuit['outputs']:
-            x = bit << 1
-            z = self.size[2]
-            outputs.append(OrderedDict((
-                ('id'       , bit),
-                ('positions', [[x, 0, z], [x, 2, z]])
-            )))
-        return outputs
-
     def __update_positions(self, base_position):
-        self.__update_inners_position(base_position)
+        #self.__update_inners_position(base_position)
         #self.__update_connections_position(base_position)
+        self.__update_position_blocks(base_position)
+        self.__update_position_ios(base_position)
+        self.__update_position_inners(base_position)
+
+    def __update_position_blocks(self, base_position):
+        from operator import sub
+        self.__update_position_io_blocks(base_position[2])
+        for logical_qubit in self.geometry['logical_qubits']:
+            for blocks in [
+                    logical_qubit.get('blocks'   , []),
+                    logical_qubit.get('injectors', []),
+                    logical_qubit.get('caps'     , [])
+            ]:
+                for block in blocks:
+                    if not isinstance(block, list):
+                        block = block['vertices']
+                    for i in range(len(block)):
+                        block[i] = list(map(sub, block[i], base_position))
+
+    def __update_position_io_blocks(self, base_z):
+        for logical_qubit in self.geometry['logical_qubits']:
+            id = logical_qubit['id']
+            x = id << 1
+            if id in self.circuit['inputs']:
+                self.__update_position_input_blocks(base_z, logical_qubit, x)
+            if id in self.circuit['outputs']:
+                self.__update_position_output_blocks(base_z, logical_qubit, x)
+
+    def __update_position_input_blocks(self, base_z, logical_qubit, x):
+        for blocks in [logical_qubit.get('blocks', []), logical_qubit.get('caps', [])]:
+            for block in blocks:
+                if not isinstance(block, list):
+                    block = block['vertices']
+                for i in range(len(block)):
+                    if block[i] == [x, 0, 0]  : block[i] = [x, 0, base_z]
+                    elif block[i] == [x, 2, 0]: block[i] = [x, 2, base_z]
+
+    def __update_position_output_blocks(self, base_z, logical_qubit, x):
+        for blocks in [logical_qubit.get('blocks', []), logical_qubit.get('caps', [])]:
+            for block in blocks:
+                if not isinstance(block, list):
+                    block = block['vertices'] 
+                z = self.__ac_size[2]
+                for i in range(len(block)):
+                    if block[i] == [x, 0, z]  : block[i] = [x, 0, self.size[2] + base_z]
+                    elif block[i] == [x, 2, z]: block[i] = [x, 2, self.size[2] + base_z]
+
+    def __update_position_ios(self, base_position):
+        from operator import sub
+        for ios in [self.geometry.get('inputs', []), self.geometry.get('outputs', [])]:
+            for io in ios:
+                positions = io['positions']
+                for i in range(len(positions)):
+                    positions[i] = list(map(sub, positions[i], base_position))
+
+    def __update_position_inners(self, base_position):
+        from operator import sub
+        for module in self.geometry['modules']:
+            module['position'] = list(map(sub, module['position'], base_position))
 
     def __update_inners_position(self, base_position):
         for i, inner in enumerate(self.inners):
@@ -236,6 +315,7 @@ class Module:
 
         icpm = Converter.to_icpm(json.loads(result))
         self.circuit['operations'] = icpm.get('circuit', {}).get('operations', [])
+        self.__set_ac_size()
 
     def __place(self, permissible_error_rate, permissible_size):
         self.__set_id_of_pins()
@@ -442,15 +522,15 @@ class Module:
             ])
 
     def __connect(self, permissible_size):
-        region    = self.__scale_down(self.__make_connection_region(permissible_size))
-        endpoints = self.__scale_down(self.__make_connection_endpoints())
-        obstacles = self.__scale_down(self.__make_connection_obstacles(region))
+        region    = self.__make_connection_region(permissible_size)
+        endpoints = self.__make_connection_endpoints()
+        obstacles = self.__make_connection_obstacles(region)
 
         with tempfile.NamedTemporaryFile('w') as fp:
             json.dump({
-                'endpoints': endpoints,
-                'obstacles': obstacles,
-                'region'   : region
+                'endpoints': self.__scale_down(endpoints),
+                'obstacles': self.__scale_down(obstacles),
+                'region'   : self.__scale_down(region)
             }, fp)
 
             fp.flush()
@@ -549,15 +629,13 @@ class Module:
         for bit in self.circuit['inputs']:
             x = bit << 1
             z = region['position'][2]
-            for i in range(2):
-                obstacles.append({'size': [0, 0, -z], 'position': [x, i << 1, z]})
+            obstacles.append({'size': [0, 2, -z], 'position': [x, 0, z]})
         # outputの経路確保
         for bit in self.circuit['outputs']:
             x = bit << 1
             z = self.__ac_size[2]
             d = region['size'][2] + region['position'][2] - z
-            for i in range(2):
-                obstacles.append({'size': [0, 0, d], 'position': [x, i << 1, z]})
+            obstacles.append({'size': [0, 2, d], 'position': [x, 0, z]})
         return obstacles
 
     def __scale(self, element, scaling):
