@@ -49,6 +49,7 @@ class Template:
         self.pure_error_rate = json_object.get('error', 0.0)
         self.size            = json_object.get('size')
         self.circuit         = json_object.get('circuit', {})
+        self.geometry        = json_object.get('geometry')
         self.inners          = [] # (inner, count)
         self.__set_inners(self.__collect_inners())
         Template.__counter += 1

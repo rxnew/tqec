@@ -25,6 +25,11 @@ class Converter:
                 ('format' , 'tqec'),
                 ('circuit', cls.icm_to_tqec(json_object['circuit']))
             ))
+        if json_object['format'] == 'icpm':
+            return OrderedDict((
+                ('format' , 'tqec'),
+                ('circuit', cls.icpm_to_tqec(json_object['circuit']))
+            ))
 
     @classmethod
     def qc_to_icpm(cls, qc_circuit):
@@ -426,6 +431,266 @@ class IcmToTqecConverter:
             if logical_qubits[i]['id'] == id: return i
 
 class IcpmToTqecConverter:
+    cnot_length = 4
+    pin_length = 6
+    pin_margin = 2
+
+    @classmethod
+    def convert(cls, icpm_circuit):
+        icpm_bits            = icpm_circuit.get('bits', [])
+        icpm_inputs          = icpm_circuit.get('inputs', [])
+        icpm_outputs         = icpm_circuit.get('outputs', [])
+        icpm_initializations = icpm_circuit.get('initializations', [])
+        icpm_measurements    = icpm_circuit.get('measurements', [])
+        icpm_operations      = icpm_circuit.get('operations', [])
+
+        bit_length     = cls.__calculate_bit_length(icpm_operations)
+        logical_qubits = cls.__convert_bits(icpm_bits, bit_length)
+        logical_qubits = cls.__convert_inputs(icpm_inputs, logical_qubits)
+        logical_qubits = cls.__convert_outputs(icpm_outputs, bit_length, logical_qubits)
+        logical_qubits = cls.__convert_initializations(icpm_initializations, logical_qubits)
+        logical_qubits = cls.__convert_measurements(icpm_measurements, bit_length, logical_qubits)
+        logical_qubits = cls.__convert_operations(icpm_operations, logical_qubits)
+
+        return OrderedDict([
+            ('logical_qubits', logical_qubits)
+        ])
+
+    @classmethod
+    def __calculate_bit_length(cls, icpm_operations):
+        circuit_length = 0
+        cls.__step_z = []
+        for operation_step in icpm_operations:
+            if not isinstance(operation_step, list):
+                operation_step = [operation_step]
+
+            step_length = 0
+            for operation in operation_step:
+                operation_type = operation['type'].lower()
+                if operation_type == 'cnot':
+                    step_length = max(step_length, cls.cnot_length)
+                elif operation_type == 'pin':
+                    step_length = max(step_length, cls.pin_length + cls.pin_margin)
+
+            cls.__step_z.append(circuit_length)
+            circuit_length += step_length
+        return circuit_length
+
+    @classmethod
+    def __convert_bits(cls, icpm_bits, bit_length):
+        cls.__max_id = 0
+        return [cls.__convert_bit(icpm_bit, bit_length) for icpm_bit in icpm_bits]
+
+    @classmethod
+    def __convert_inputs(cls, icpm_inputs, logical_qubits):
+        for icpm_input in icpm_inputs:
+            cls.__convert_input(icpm_input, logical_qubits)
+        return logical_qubits
+
+    @classmethod
+    def __convert_outputs(cls, icpm_outputs, bit_length, logical_qubits):
+        for icpm_output in icpm_outputs:
+            cls.__convert_output(icpm_output, bit_length, logical_qubits)
+        return logical_qubits
+
+    @classmethod
+    def __convert_initializations(cls, icpm_initializations, logical_qubits):
+        for icpm_initialization in icpm_initializations:
+            cls.__convert_initialization(icpm_initialization, logical_qubits)
+        return logical_qubits
+
+    @classmethod
+    def __convert_measurements(cls, icpm_measurements, bit_length, logical_qubits):
+        for icpm_measurement in icpm_measurements:
+            cls.__convert_measurement(icpm_measurement, bit_length, logical_qubits)
+        return logical_qubits
+
+    @classmethod
+    def __convert_operations(cls, icpm_operations, logical_qubits):
+        return logical_qubits + [
+            logical_qubit
+            for step, icpm_operation_step in enumerate(icpm_operations)
+            for logical_qubit in \
+            cls.__convert_operation_step(icpm_operation_step, step, logical_qubits)
+        ]
+
+    @classmethod
+    def __convert_bit(cls, icpm_bit, bit_length):
+        cls.__max_id = max(cls.__max_id, icpm_bit)
+        x = icpm_bit << 1
+        blocks = [
+            [[x, 0, 0], [x, 0, bit_length]],
+            [[x, 2, 0], [x, 2, bit_length]]
+         ]
+        return OrderedDict((
+            ('id'       , icpm_bit),
+            ('type'     , 'rough'),
+            ('blocks'   , blocks),
+            ('injectors', []),
+            ('caps'     , [])
+        ))
+
+    @classmethod
+    def __convert_input(cls, icpm_input, logical_qubits):
+        index = cls.__find_index_of_logical_qubits(icpm_input, logical_qubits)
+        x = icpm_input << 1
+        block = [[x, 0, 0], [x, 2, 0]]
+        logical_qubits[index]['caps'].append(block)
+
+    @classmethod
+    def __convert_output(cls, icpm_output, bit_length, logical_qubits):
+        index = cls.__find_index_of_logical_qubits(icpm_output, logical_qubits)
+        x = icpm_output << 1
+        block = [[x, 0, bit_length], [x, 2, bit_length]]
+        logical_qubits[index]['caps'].append(block)
+
+    @classmethod
+    def __convert_initialization(cls, icpm_initialization, logical_qubits):
+        initialization_type = icpm_initialization['type'].lower()
+        initialization_bit  = icpm_initialization['bit']
+        index = cls.__find_index_of_logical_qubits(initialization_bit, logical_qubits)
+        x = initialization_bit << 1
+        block = [[x, 0, 0], [x, 2, 0]]
+        if initialization_type == 'z':
+            logical_qubits[index]['blocks'].append(block)
+        elif initialization_type != 'x':
+            logical_qubits[index]['injectors'].append(block)
+
+    @classmethod
+    def __convert_measurement(cls, icpm_measurement, bit_length, logical_qubits):
+        measurement_type = icpm_measurement['type'].lower()
+        measurement_bit  = icpm_measurement['bit']
+        index = cls.__find_index_of_logical_qubits(measurement_bit, logical_qubits)
+        x = measurement_bit << 1
+        block = [[x, 0, bit_length], [x, 2, bit_length]]
+        if measurement_type == 'z':
+            logical_qubits[index]['blocks'].append(block)
+        elif measurement_type == 'x/z' or measurement_type == 'z/x':
+            logical_qubits[index]['blocks'].append(OrderedDict((
+                ('vertices', block),
+                ('visual'  , {'transparent': True})
+            )))
+
+    @classmethod
+    def __convert_operation_step(cls, icpm_operation_step, step, logical_qubits):
+        if not isinstance(icpm_operation_step, list):
+            return [cls.__convert_operation(icpm_operation_step, step, logical_qubits)]
+        return list(filter(None,
+                           [cls.__convert_operation(icpm_operation, step, logical_qubits)
+                            for icpm_operation in icpm_operation_step]))
+
+    @classmethod
+    def __convert_operation(cls, icpm_operation, step, logical_qubits):
+        operation_type = icpm_operation['type'].lower()
+        if operation_type == 'cnot':
+            return cls.__convert_cnot(icpm_operation, step, logical_qubits)
+        elif operation_type == 'pin':
+            return cls.__convert_pin(icpm_operation, step, logical_qubits)
+
+    @classmethod
+    def __convert_cnot(cls, icpm_cnot, step, logical_qubits):
+        cls.__max_id += 1
+        control_bit = icpm_cnot['controls'][0]
+        cls.__update_braiding_control_bit(control_bit, step, logical_qubits)
+        blocks = cls.__make_braiding_blocks(control_bit, icpm_cnot['targets'], step)
+        return OrderedDict((
+            ('id'       , cls.__max_id),
+            ('type'     , 'smooth'),
+            ('blocks'   , blocks)
+        ))
+
+    @classmethod
+    def __convert_pin(cls, icpm_pin, step, logical_qubits):
+        for bit in icpm_pin['controls'] + icpm_pin['targets']:
+            x = bit << 1
+            z1 = cls.__step_z[step] + cls.pin_margin
+            z2 = z1 + cls.pin_length
+            cap1 = [[x, 0, z1], [x, 2, z1]]
+            cap2 = [[x, 0, z2], [x, 2, z2]]
+            index = cls.__find_index_of_logical_qubits(bit, logical_qubits)
+            logical_qubits[index]['caps'].append(cap1)
+            logical_qubits[index]['caps'].append(cap2)
+
+    @classmethod
+    def __update_braiding_control_bit(cls, bit, step, logical_qubits):
+        x = bit << 1
+        z = cls.__step_z[step] + 2
+        block = [[x, 0, z], [x, 2, z]]
+        index = cls.__find_index_of_logical_qubits(bit, logical_qubits)
+        logical_qubits[index]['blocks'].append(block)
+
+    @classmethod
+    def __make_braiding_blocks(cls, control_bit, target_bits, step):
+        from copy import deepcopy
+
+        bits = sorted([control_bit] + target_bits)
+        up = (bits[0] != control_bit)
+        x = (bits[0] << 1) - 1
+        y = 3 if up else 1
+        z = cls.__step_z[step] + 1
+        position = [x, y, z]
+        blocks = [deepcopy(position)]
+        direct = -1
+
+        def get_direct(position_a, position_b):
+            for i in range(3):
+                if position_a[i] != position_b[i]: return i
+
+        def update_blocks():
+            nonlocal direct
+            current_direct = get_direct(blocks[-1], position)
+            if current_direct == direct:
+                blocks.pop()
+            blocks.append(deepcopy(position))
+            direct = current_direct
+
+        def toggle_up():
+            nonlocal up
+            if up:
+                position[1] -= 2
+                up = False
+            else:
+                position[1] += 2
+                up = True
+            update_blocks()
+
+        for bit in range(bits[0], bits[-1] + 1):
+            if bit in bits:
+                if up: toggle_up()
+            else:
+                if not up: toggle_up()
+            position[0] += 2
+            update_blocks()
+
+        if not up and bits[-1] != control_bit: toggle_up()
+
+        position[2] += 2
+        update_blocks()
+
+        for bit in reversed(range(bits[0], bits[-1] + 1)):
+            if bit == control_bit:
+                if up: toggle_up()
+            else:
+                if not up: toggle_up()
+            position[0] -= 2
+            update_blocks()
+
+        position[2] -= 2
+        update_blocks()
+
+        return [blocks]
+
+    @classmethod
+    def __find_index_of_logical_qubits(cls, id, logical_qubits):
+        for i in range(len(logical_qubits)):
+            if logical_qubits[i]['id'] == id: return i
+
+
+
+
+
+
+class IcpmToTqecConverterBak:
     @classmethod
     def convert(cls, icpm_circuit):
         icpm_initializations = icpm_circuit.get('initializations', [])

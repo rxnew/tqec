@@ -1,7 +1,6 @@
 from converter import Converter
 from util import Util
 
-import copy
 import csv
 import json
 import math
@@ -13,7 +12,7 @@ import tempfile
 
 import numpy as np
 
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 
 # ac: algorithmic circuit
 class Module:
@@ -23,12 +22,14 @@ class Module:
     ac_margin           = [0, 2, 0]
     cnot_length         = 4
     pin_length          = 6
+    pin_margin          = 2
 
     __counter  = {}
     __commands = {
         'optimization'   : './bin/optimization/sa %s',
         'placement'      : './bin/placement/spp3 %s',
-        'parallelization': './bin/parallelization/csvd_ev1 %s'
+        'parallelization': './bin/parallelization/csvd_ev1 %s',
+        'connection'     : './bin/connection/connection %s'
     }
 
     @classmethod
@@ -56,18 +57,13 @@ class Module:
         self.id         = self.make_id(template.type_name)
         self.type_name  = template.type_name
         self.circuit    = template.circuit
+        self.geometry   = template.geometry
         self.error_rate = template.pure_error_rate
         self.size       = template.size # 後に更新 (elementary module用)
         self.inners     = inners
 
-        self.__prepare()
-
-        self.__parallelize()
-        self.__place(*constraints)
-        self.__connect()
-
-        # テスト用
-        self.__set_size()
+        if self.is_regular(): self.__init_regular(*constraints)
+        else                : self.__init_non_regular()
 
     def dump(self, indent=4):
         if not os.path.isdir(self.dump_directory_path):
@@ -80,12 +76,13 @@ class Module:
 
     def to_output_format(self):
         return OrderedDict((
-            ('id'     , self.id),
-            ('type'   , self.type_name),
-            ('size'   , self.size),
-            ('error'  , self.error_rate),
-            ('circuit', self.circuit),
-            ('modules', self.to_output_format_inners())
+            ('type'    , 'tqec'),
+            ('id'      , self.id),
+            ('type'    , self.type_name),
+            ('size'    , self.size),
+            ('error'   , self.error_rate),
+            ('circuit' , self.circuit),
+            ('geometry', self.geometry)
         ))
 
     def to_output_format_inners(self):
@@ -108,6 +105,24 @@ class Module:
 
     def is_elementary(self):
         return len(self.inners) == 0
+
+    def is_regular(self):
+        return self.geometry == None
+
+    def __init_regular(self, *constraints):
+        self.__prepare()
+
+        self.__parallelize()
+        self.__place(*constraints)
+        self.__connect()
+
+        # テスト用
+        self.__set_size()
+        self.__set_geometry()
+
+    def __init_non_regular(self):
+        self.geometry['inputs']  = self.geometry.get('inputs' , [])
+        self.geometry['outputs'] = self.geometry.get('outputs', [])
 
     def __prepare(self):
         self.__set_inner_id_dict()
@@ -134,19 +149,67 @@ class Module:
                 if operation_type == 'cnot':
                     step_length = max(step_length, self.cnot_length)
                 elif operation_type == 'pin':
-                    step_length = max(step_length, self.pin_length)
+                    step_length = max(step_length, self.pin_length + self.pin_margin)
 
             circuit_length += step_length
         return circuit_length
 
     # TODO: connectionを考慮
-    @Util.non_elementary()
+    # TODO: -1の位置のCNOTの扱い
     def __set_size(self):
         ac = {'size': self.__ac_size, 'position': [0, 0, 0]}
         rectangles = self.to_output_format_inners() + [ac]
         convex_hull = self.__calculate_convex_hull(rectangles)
         self.size = convex_hull['size']
         self.__update_positions(convex_hull['position'])
+
+    def __set_geometry(self):
+        self.geometry = Converter.icpm_to_tqec(self.circuit)
+        self.geometry['logical_qubits'].extend(self.__make_geometry_connections())
+        self.geometry['modules'] = self.to_output_format_inners()
+        self.geometry['inputs']  = self.__make_geometry_inputs()
+        self.geometry['outputs'] = self.__make_geometry_outpus()
+
+    def __make_geometry_connections(self):
+        logical_qubits = []
+        id_count = self.__find_logical_qubits_max_id(self.geometry['logical_qubits'])
+        for connection in self.__connections:
+            # 接続に失敗した経路を無視 (暫定)
+            if len(connection) == 0: continue
+            id_count += 1
+            logical_qubits.append(OrderedDict((
+                ('id'    , id_count),
+                ('type'  , 'rough'),
+                ('blocks', [connection])
+            )))
+        return logical_qubits
+
+    def __find_logical_qubits_max_id(self, logical_qubits):
+        max_id = 0
+        for logical_qubit in logical_qubits:
+            max_id = max(max_id, logical_qubit['id'])
+        return max_id
+
+    def __make_geometry_inputs(self):
+        inputs = []
+        for bit in self.circuit['inputs']:
+            x = bit << 1
+            inputs.append(OrderedDict((
+                ('id'       , bit),
+                ('positions', [[x, 0, 0], [x, 2, 0]])
+            )))
+        return inputs
+
+    def __make_geometry_outpus(self):
+        outputs = []
+        for bit in self.circuit['outputs']:
+            x = bit << 1
+            z = self.size[2]
+            outputs.append(OrderedDict((
+                ('id'       , bit),
+                ('positions', [[x, 0, z], [x, 2, z]])
+            )))
+        return outputs
 
     def __update_positions(self, base_position):
         self.__update_inners_position(base_position)
@@ -314,7 +377,8 @@ class Module:
         }
 
     def __make_placement_base_z(self, max_inner_size, ac_size, permissible_size):
-        x = max(ac_size[0], max_inner_size[0])
+        #x = max(ac_size[0], max_inner_size[0])
+        x = permissible_size[0] - ac_size[0]
         y = permissible_size[1] - ac_size[1]
         base_size = [x, y, 0]
         base_position = [0, ac_size[1], 0]
@@ -333,23 +397,115 @@ class Module:
     def __set_inners_positions(self, rectangles, inner_ids):
         for rectangle, id in zip(rectangles, inner_ids):
             self.get_inner(id).positions.append([
-                rectangle['position'][i] + self.inner_margin[i]
+                #rectangle['position'][i] + self.inner_margin[i]
+                rectangle['position'][i] + (self.inner_margin[i] if i == 1 else 0)
                 for i in range(3)
             ])
+
+    def __connect(self):
+        endpoints = self.__scale_down(self.__make_connection_endpoints())
+        obstacles = self.__scale_down(self.__make_connection_obstacles())
+        region    = self.__scale_down(self.__make_connection_region())
+
+        with tempfile.NamedTemporaryFile('w') as fp:
+            json.dump({
+                'endpoints': endpoints,
+                'obstacles': obstacles,
+                'region'   : region
+            }, fp)
+
+            fp.flush()
+            result = self.__exec_subproccess('connection', fp.name)
+
+        #print(result)
+        self.__connections = self.__scale_up(json.loads(result)['connections'])
+
+    def __make_connection_endpoints(self):
+        pins = defaultdict(list)
+        inner_pins = defaultdict(list)
+
+        for initialization in self.circuit['initializations']:
+            if initialization['type'] != 'pin': continue
+            x = initialization['bit'] << 1
+            for i in range(2):
+                pins[initialization['module']].append([x, i << 1, 0])
+
+        for step, operation_step in enumerate(self.circuit['operations']):
+            if not isinstance(operation_step, list):
+                operation_step = [operation_step]
+            step_z = step * self.pin_length + self.pin_margin
+            z = [step_z, step_z + self.pin_length]
+            for operation in operation_step:
+                if operation['type'].lower() != 'pin': continue
+                bits = operation['controls'] + operation['targets']
+                for i in range(2):
+                    for bit in bits:
+                        x = bit << 1
+                        for j in range(2):
+                            pins[operation['module']].append([x, j << 1, z[i]])
+
+        for inner in self.inners:
+            ios = inner.inputs + inner.outputs
+            for base_position in inner.positions:
+                for io in ios:
+                    for i in range(2):
+                        position = Util.vector_add(base_position, io['positions'][i])
+                        inner_pins[inner.id].append(position)
+
+        endpoints = []
+
+        for type_name in pins.keys():
+            for i in range(len(pins[type_name])):
+                endpoints.append([pins[type_name][i], inner_pins[type_name][i]])
+
+        return endpoints
+
+    def __make_connection_obstacles(self):
+        from copy import deepcopy
+        obstacles = [{'size': self.__ac_size, 'position': [0, 0, 0]}]
+        for inner in self.inners:
+            for position in inner.positions:
+                obstacles.append({'size': deepcopy(inner.size), 'position': position})
+        return obstacles
+
+    def __make_connection_region(self):
+        # TODO: 許容サイズを考慮する
+        # self.__set_sizeと処理が被る
+        ac = {'size': self.__ac_size, 'position': [0, 0, 0]}
+        rectangles = self.to_output_format_inners() + [ac]
+        convex_hull = self.__calculate_convex_hull(rectangles)
+        size = Util.vector_add(convex_hull['size'], [4, 4, 20])
+        position = Util.vector_add(convex_hull['position'], [-2, -2, -10])
+        return {'size': size, 'position': position}
+
+    def __scale(self, element, scaling):
+        if isinstance(element, int):
+            return scaling(element)
+        if isinstance(element, list):
+            scaled_element = []
+            for i in range(len(element)):
+                scaled_element.append(self.__scale(element[i], scaling))
+        elif isinstance(element, dict):
+            scaled_element = {}
+            for key in element.keys():
+                scaled_element[key] = self.__scale(element[key], scaling)
+        return scaled_element
+
+    def __scale_up(self, element, factor=1):
+        return self.__scale(element, lambda x: x << factor)
+
+    def __scale_down(self, element, factor=1):
+        return self.__scale(element, lambda x: x >> factor)
 
     def __set_bits(self):
         # テスト
         #x = self.get_time_axis_direction_length()
         x = 10
 
-        for (index, bit) in enumerate(self.circuit.bits):
+        for index, bit in enumerate(self.circuit.bits):
             self.circuit.bits[index] = {
                 'id'   : index,
                 'range': [0, x]
                 #'source'     : [[0, index, 0], [0, index, 1]],
                 #'destination': [[x, index, 0], [x, index, 1]]
             }
-
-    def __connect(self):
-        cmd = './bin/connection'
-        pass

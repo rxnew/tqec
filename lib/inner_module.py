@@ -19,9 +19,9 @@ class InnerModule:
                 'type_name' : json_object['type'],
                 'size'      : json_object['size'],
                 'error_rate': json_object['error'],
-                'circuit'   : {
-                    'inputs' : json_object['circuit']['inputs'],
-                    'outputs': json_object['circuit']['outputs']
+                'geometry'  : {
+                    'inputs'    : json_object['geometry']['inputs'],
+                    'outputs'   : json_object['geometry']['outputs']
                 }
             })
         )
@@ -31,10 +31,8 @@ class InnerModule:
         self.type_name   = module.type_name
         self.size        = module.size
         self.error_rate  = module.error_rate
-        self.circuit     = {
-            'inputs':  module.circuit['inputs'],
-            'outputs': module.circuit['outputs']
-        }
+        self.inputs      = module.geometry['inputs']
+        self.outputs     = module.geometry['outputs']
         self.count       = 1
         self.spare_count = 0
         self.positions   = []

@@ -1,13 +1,16 @@
 {
+    "type"  : "tqec",
     "error" : 0.05,
-    "size"  : [10, 10, 10],
+    "size"  : [6, 4, 6],
     "circuit": {
+    },
+    "geometry": {
         "outputs": [
             {
                 "id": 0,
                 "positions": [
-                    [6, 2, 0],
-                    [6, 2, 1]
+                    [2, 2, 6],
+                    [6, 2, 6]
                 ]
             }
         ]

@@ -18,3 +18,6 @@ add_subdirectory(${SUB_DIR}/placement)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${BIN_DIR}/parallelization)
 add_subdirectory(${SUB_DIR}/parallelization)
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${BIN_DIR}/connection)
+add_subdirectory(${SUB_DIR}/connection)
