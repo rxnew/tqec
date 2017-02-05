@@ -98,8 +98,15 @@ class Util:
         return wrapper
 
     @staticmethod
-    def vector_add(v1, v2):
+    def vector_add(a, b):
         v = []
-        for e1, e2 in zip(v1, v2):
+        for e1, e2 in zip(a, b):
             v.append(e1 + e2)
+        return v
+
+    @staticmethod
+    def vector_mul(a, b):
+        v = []
+        for e in a:
+            v.append(e * b)
         return v

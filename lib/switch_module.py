@@ -2,12 +2,12 @@ from inner_module import InnerModule
 
 class SwitchModule(InnerModule):
     @classmethod
-    def make_id(cls, input_count, output_count):
-        return 'sw_' + str(input_count) + '_' + str(output_count)
+    def make_id(cls, type_name, input_count, output_count):
+        return 'sw_' + type_name + '_' + str(input_count) + '_' + str(output_count)
 
     @classmethod
     def make_size(cls, input_count, output_count):
-        return [input_count - 1 << 1, 2, output_count - (output_count >> 1) + 1]
+        return [input_count - 1 << 1, 2, (output_count - (output_count >> 1) + 1) << 1]
 
     @classmethod
     def make_inputs(cls, input_count):
@@ -22,10 +22,10 @@ class SwitchModule(InnerModule):
         outputs = []
         output_count_a = output_count >> 1
         output_count_b = output_count - output_count_a
-        for i in range(output_count_a):
-            x = i << 1
-            outputs.append({'positions': [[x, 0, 0], [x, 2, 0]]})
         for i in range(output_count_b):
+            x = i << 1
+            outputs.append({'positions': [[x, 0, size[2]], [x, 2, size[2]]]})
+        for i in range(output_count_a):
             x = size[0] - (i << 1)
             outputs.append({'positions': [[x, 0, size[2]], [x, 2, size[2]]]})
         return outputs
@@ -33,7 +33,7 @@ class SwitchModule(InnerModule):
     def __init__(self, type_name, input_count, output_count):
         size = self.make_size(input_count, output_count)
         super().__init__(type('InnerModuleType', (), {
-            'id'        : self.make_id(input_count, output_count),
+            'id'        : self.make_id(type_name, input_count, output_count),
             'type_name' : type_name,
             'size'      : size,
             'error_rate': 0.0,

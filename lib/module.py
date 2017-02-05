@@ -129,21 +129,14 @@ class Module:
         self.geometry['outputs'] = self.geometry.get('outputs', [])
 
     def __prepare(self):
-        self.__set_inner_id_dict()
+        #self.__set_inner_id_dict()
         self.__set_ac_size()
 
     def __set_inner_id_dict(self):
         self.__inner_id_dict = {inner.id: i for i, inner in enumerate(self.inners)}
 
-    def __set_switch_id_dict(self, switches):
-        self.switches = []
-        self.__switch_id_dict = {}
-        for switch in switches:
-            if switch.id in self.__switch_id_dict:
-                self.switch[self.__switch_id_dict[switch.id]].count += 1
-                continue
-            self.__switch_id_dict[switch.id] = len(self.switches)
-            self.switches.append(switch)
+    def __set_switch_id_dict(self):
+        self.__switch_id_dict = {switch.id: i for i, switch in enumerate(self.switches)}
 
     def __set_ac_size(self):
         # i番目のビット線の座標は [(i + 1) * 2, 0, 0] (i >= 0)
@@ -248,6 +241,8 @@ class Module:
         self.__set_id_of_pins()
         self.__set_spares(permissible_error_rate)
         self.__set_switches()
+        self.__set_inner_id_dict()
+        self.__set_switch_id_dict()
         self.__place_inners(permissible_size)
         self.__place_switches(permissible_size)
 
@@ -307,15 +302,20 @@ class Module:
         ])
 
     def __set_switches(self):
+        self.__switch_type_dict = {}
         switch_io_counts = defaultdict(lambda: defaultdict(int))
         for inner in self.inners:
             if inner.spare_count == 0: continue
+            self.__switch_type_dict[inner.id] = inner.type_name
             switch_io_counts[inner.type_name]['input']  += inner.spare_count + inner.count
             switch_io_counts[inner.type_name]['output'] += inner.count
-        self.__set_switch_id_dict([
+        self.switches = [
             SwitchModule(type_name, io_count['input'], io_count['output'])
             for type_name, io_count in switch_io_counts.items()
-        ])
+        ]
+
+    def __is_to_use_switch(self, id):
+        return id in self.__switch_type_dict
 
     @Util.non_elementary()
     def __place_inners(self, permissible_size):
@@ -460,14 +460,21 @@ class Module:
         self.__connections = self.__scale_up(json.loads(result)['connections'])
 
     def __make_connection_endpoints(self):
-        pins = defaultdict(list)
-        inner_pins = defaultdict(list)
+        ac_direct_pins = defaultdict(list)
+        ac_switch_pins = defaultdict(list)
+        inner_direct_pins = defaultdict(list)
+        inner_switch_pins = defaultdict(list)
+        switch_input_pins = defaultdict(list)
+        switch_output_pins = defaultdict(list)
 
         for initialization in self.circuit['initializations']:
-            if initialization['type'] != 'pin': continue
+            if initialization['type'].lower() != 'pin': continue
             x = initialization['bit'] << 1
+            id = initialization['module'].lower()
+            if self.__is_to_use_switch(id): pins = ac_switch_pins
+            else                          : pins = ac_direct_pins
             for i in range(2):
-                pins[initialization['module']].append([x, i << 1, 0])
+                pins[id].append([x, i << 1, 0])
 
         for step, operation_step in enumerate(self.circuit['operations']):
             if not isinstance(operation_step, list):
@@ -476,27 +483,51 @@ class Module:
             z = [step_z, step_z + self.pin_length]
             for operation in operation_step:
                 if operation['type'].lower() != 'pin': continue
+                id = operation['module'].lower()
+                if self.__is_to_use_switch(id): pins = ac_switch_pins
+                else                          : pins = ac_direct_pins
                 bits = operation['controls'] + operation['targets']
                 for i in range(2):
                     for bit in bits:
                         x = bit << 1
                         for j in range(2):
-                            pins[operation['module']].append([x, j << 1, z[i]])
+                            pins[id].append([x, j << 1, z[i]])
 
         for inner in self.inners:
-            ios = inner.inputs + inner.outputs
+            if self.__is_to_use_switch(inner.id): pins = inner_switch_pins
+            else                                : pins = inner_direct_pins
             for base_position in inner.positions:
-                for io in ios:
+                for io in inner.inputs + inner.outputs:
                     for i in range(2):
                         position = Util.vector_add(base_position, io['positions'][i])
-                        inner_pins[inner.id].append(position)
+                        pins[inner.id].append(position)
+
+        for switch in self.switches:
+            for base_position in switch.positions:
+                for input in switch.inputs:
+                    for i in range(2):
+                        position = Util.vector_add(base_position, input['positions'][i])
+                        switch_input_pins[switch.type_name].append(position)
+                for output in switch.outputs:
+                    for i in range(2):
+                        position = Util.vector_add(base_position, output['positions'][i])
+                        switch_output_pins[switch.type_name].append(position)
 
         endpoints = []
 
-        for type_name in pins.keys():
-            for i in range(len(pins[type_name])):
-                endpoints.append([pins[type_name][i], inner_pins[type_name][i]])
+        for id in ac_direct_pins.keys():
+            for i in range(len(ac_direct_pins[id])):
+                endpoints.append([ac_direct_pins[id][i], inner_direct_pins[id][i]])
 
+        for id in ac_switch_pins.keys():
+            type_name = self.__switch_type_dict[id]
+            for i in range(len(ac_switch_pins[id])):
+                endpoints.append([ac_switch_pins[id][i], switch_output_pins[type_name][i]])
+
+        for id in inner_switch_pins.keys():
+            type_name = self.__switch_type_dict[id]
+            for i in range(len(inner_switch_pins[id])):
+                endpoints.append([inner_switch_pins[id][i], switch_input_pins[type_name][i]])
         return endpoints
 
     def __make_connection_obstacles(self):
