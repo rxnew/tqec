@@ -42,7 +42,8 @@ class InnerModule:
             OrderedDict((
                 ('id'      , self.id),
                 ('size'    , self.size),
-                ('position', position)
+                ('position', position),
+                ('visual'  , {'transparent': True})
             ))
             for position in self.positions
         ]
