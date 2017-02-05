@@ -423,7 +423,7 @@ class Module:
         for inner in self.inners:
             for position in inner.positions:
                 base_z = max(base_z, position[2] + inner.size[2])
-        base['position'][2] = base_z
+        base['position'][2] = base_z + (self.inner_margin[2] << 1)
         return base
 
     def __max_inner_size(self):
@@ -501,7 +501,7 @@ class Module:
 
     def __make_connection_obstacles(self):
         obstacles = [{'size': self.__ac_size, 'position': [0, 0, 0]}]
-        for inner in self.inners:
+        for inner in self.inners + self.switches:
             for position in inner.positions:
                 obstacles.append({'size': inner.size, 'position': position})
         return obstacles
