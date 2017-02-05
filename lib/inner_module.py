@@ -1,5 +1,3 @@
-from module import Module
-
 import json
 
 from collections import OrderedDict
@@ -8,6 +6,8 @@ from functools import reduce
 class InnerModule:
     @classmethod
     def load(cls, id):
+        from module import Module
+
         file_name = Module.make_file_name(id)
 
         with open(file_name, 'r') as fp:
@@ -20,8 +20,8 @@ class InnerModule:
                 'size'      : json_object['size'],
                 'error_rate': json_object['error'],
                 'geometry'  : {
-                    'inputs'    : json_object['geometry']['inputs'],
-                    'outputs'   : json_object['geometry']['outputs']
+                    'inputs' : json_object['geometry']['inputs'],
+                    'outputs': json_object['geometry']['outputs']
                 }
             })
         )
@@ -56,19 +56,3 @@ class InnerModule:
 
     def cost(self):
         return reduce(lambda x, y: x * y, self.size)
-
-    def get_input_positions(self):
-        return [self.get_raw_io_format(input, 0) for input in self.inputs]
-
-    def get_output_positions(self):
-        return [self.get_raw_io_format(output, 1) for output in self.outputs]
-
-    def get_io_positions(self, io, either):
-        if type(io) == dict:
-            return (io['id'], io['positions'])
-
-        bit = self.bits[io]
-        bit_id = bit['id']
-        bit_position_x = bit['range'][either]
-
-        return (bit_id, [[bit_position_x, bit_id, 0], [bit_position_x, bit_id, 1]])

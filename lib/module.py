@@ -1,3 +1,4 @@
+from switch_module import SwitchModule
 from converter import Converter
 from util import Util
 
@@ -125,7 +126,7 @@ class Module:
         self.geometry['outputs'] = self.geometry.get('outputs', [])
 
     def __prepare(self):
-        self.__set_inner_id_dict()
+        #self.__set_inner_id_dict()
         self.__set_ac_size()
 
     def __set_inner_id_dict(self):
@@ -230,11 +231,11 @@ class Module:
         icpm = Converter.to_icpm(json.loads(result))
         self.circuit['operations'] = icpm.get('circuit', {}).get('operations', [])
 
-        #self.set_bits()
-
     def __place(self, permissible_error_rate, permissible_size):
         self.__set_id_of_pins()
         self.__set_spares(permissible_error_rate)
+        self.__set_switches()
+        self.__set_inner_id_dict()
         self.__place_inners(permissible_size)
 
     # 同一テンプレートから異なるモジュールを生成しない場合
@@ -271,8 +272,7 @@ class Module:
             result = self.__exec_subproccess('optimization', fp.name)
 
         spare_counts = list(map(int, result.rstrip().split(',')))
-
-        return self.__set_spare_counts(spare_counts)
+        self.__set_spare_counts(spare_counts)
 
     def __make_optimization_modules(self):
         return [inner.to_optimization_format() for inner in self.inners]
@@ -292,6 +292,17 @@ class Module:
             Util.combination(n + x, n + i) * pow(e, x - i) * pow(1.0 - e, n + i)
             for i in range(x + 1)
         ])
+
+    def __set_switches(self):
+        switch_io_counts = defaultdict(lambda: defaultdict(int))
+        for inner in self.inners:
+            if inner.spare_count == 0: continue
+            switch_io_counts[inner.type_name]['input']  += inner.spare_count + inner.count
+            switch_io_counts[inner.type_name]['output'] += inner.count
+        switches = []
+        for type_name, io_count in switch_io_counts.items():
+            switches.append(SwitchModule(type_name, io_count['input'], io_count['output']))
+        self.inners.extend(switches)
 
     @Util.non_elementary()
     def __place_inners(self, permissible_size):
@@ -461,11 +472,10 @@ class Module:
         return endpoints
 
     def __make_connection_obstacles(self):
-        from copy import deepcopy
         obstacles = [{'size': self.__ac_size, 'position': [0, 0, 0]}]
         for inner in self.inners:
             for position in inner.positions:
-                obstacles.append({'size': deepcopy(inner.size), 'position': position})
+                obstacles.append({'size': inner.size, 'position': position})
         return obstacles
 
     def __make_connection_region(self):
@@ -496,16 +506,3 @@ class Module:
 
     def __scale_down(self, element, factor=1):
         return self.__scale(element, lambda x: x >> factor)
-
-    def __set_bits(self):
-        # テスト
-        #x = self.get_time_axis_direction_length()
-        x = 10
-
-        for index, bit in enumerate(self.circuit.bits):
-            self.circuit.bits[index] = {
-                'id'   : index,
-                'range': [0, x]
-                #'source'     : [[0, index, 0], [0, index, 1]],
-                #'destination': [[x, index, 0], [x, index, 1]]
-            }
