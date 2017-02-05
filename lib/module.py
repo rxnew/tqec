@@ -88,7 +88,7 @@ class Module:
 
     def to_output_format_inners(self):
         output_format = []
-        for inner in self.inners:
+        for inner in self.inners + self.switches:
             output_format.extend(inner.to_output_format())
         return output_format
 
@@ -103,6 +103,9 @@ class Module:
 
     def get_inner(self, inner_id):
         return self.inners[self.__inner_id_dict[inner_id]]
+
+    def get_switch(self, switch_id):
+        return self.switches[self.__switch_id_dict[switch_id]]
 
     def is_elementary(self):
         return len(self.inners) == 0
@@ -126,11 +129,21 @@ class Module:
         self.geometry['outputs'] = self.geometry.get('outputs', [])
 
     def __prepare(self):
-        #self.__set_inner_id_dict()
+        self.__set_inner_id_dict()
         self.__set_ac_size()
 
     def __set_inner_id_dict(self):
         self.__inner_id_dict = {inner.id: i for i, inner in enumerate(self.inners)}
+
+    def __set_switch_id_dict(self, switches):
+        self.switches = []
+        self.__switch_id_dict = {}
+        for switch in switches:
+            if switch.id in self.__switch_id_dict:
+                self.switch[self.__switch_id_dict[switch.id]].count += 1
+                continue
+            self.__switch_id_dict[switch.id] = len(self.switches)
+            self.switches.append(switch)
 
     def __set_ac_size(self):
         # i番目のビット線の座標は [(i + 1) * 2, 0, 0] (i >= 0)
@@ -235,8 +248,8 @@ class Module:
         self.__set_id_of_pins()
         self.__set_spares(permissible_error_rate)
         self.__set_switches()
-        self.__set_inner_id_dict()
         self.__place_inners(permissible_size)
+        self.__place_switches(permissible_size)
 
     # 同一テンプレートから異なるモジュールを生成しない場合
     def __set_id_of_pins(self):
@@ -299,30 +312,34 @@ class Module:
             if inner.spare_count == 0: continue
             switch_io_counts[inner.type_name]['input']  += inner.spare_count + inner.count
             switch_io_counts[inner.type_name]['output'] += inner.count
-        switches = []
-        for type_name, io_count in switch_io_counts.items():
-            switches.append(SwitchModule(type_name, io_count['input'], io_count['output']))
-        self.inners.extend(switches)
+        self.__set_switch_id_dict([
+            SwitchModule(type_name, io_count['input'], io_count['output'])
+            for type_name, io_count in switch_io_counts.items()
+        ])
 
     @Util.non_elementary()
     def __place_inners(self, permissible_size):
         max_inner_size = self.__max_inner_size()
-        rectangles, inner_ids = self.__make_placement_rectangles()
-
-        # マージンを考慮
         max_inner_size = [max_inner_size[i] + self.inner_margin[i] * 2 for i in range(3)]
-        ac_size        = [self.__ac_size[i] + self.ac_margin[i]        for i in range(3)]
+        rectangles, inner_ids = self.__make_placement_rectangles(self.inners)
 
         # Y軸方向のストリップパッキング
-        base = self.__make_placement_base_y(max_inner_size, ac_size)
+        base = self.__make_placement_base_y(max_inner_size)
         rectangles = self.__place_rectangles(rectangles, base)
 
         if not self.__is_within_permissible_size(rectangles, permissible_size):
             # Z軸方向のストリップパッキング
-            base = self.__make_placement_base_z(max_inner_size, ac_size, permissible_size)
+            base = self.__make_placement_base_z(permissible_size)
             rectangles = self.__place_rectangles(rectangles, base)
 
-        self.__set_inners_positions(rectangles, inner_ids)
+        self.__set_inners_positions(rectangles, inner_ids, self.get_inner)
+
+    @Util.non_elementary()
+    def __place_switches(self, permissible_size):
+        rectangles, inner_ids = self.__make_placement_rectangles(self.switches)
+        base = self.__make_placement_base_switch(permissible_size) 
+        rectangles = self.__place_rectangles(rectangles, base)
+        self.__set_inners_positions(rectangles, inner_ids, self.get_switch)
 
     def __place_rectangles(self, rectangles, base):
         with tempfile.NamedTemporaryFile('w') as fp:
@@ -364,11 +381,11 @@ class Module:
             'position': position
         }
 
-    def __make_placement_rectangles(self):
+    def __make_placement_rectangles(self, inners):
         rectangles = []
         inner_ids = []
 
-        for inner in self.inners:
+        for inner in inners:
             size =  [inner.size[i] + self.inner_margin[i] * 2 for i in range(3)]
             rectangle = {'size': size}
             for i in range(inner.count + inner.spare_count):
@@ -377,7 +394,8 @@ class Module:
 
         return rectangles, inner_ids
 
-    def __make_placement_base_y(self, max_inner_size, ac_size):
+    def __make_placement_base_y(self, max_inner_size):
+        ac_size = Util.vector_add(self.__ac_size, self.ac_margin)
         x = max(ac_size[0], max_inner_size[0])
         z = max(ac_size[2], max_inner_size[2])
         base_size = [x, 0, z]
@@ -387,7 +405,8 @@ class Module:
             'position': base_position
         }
 
-    def __make_placement_base_z(self, max_inner_size, ac_size, permissible_size):
+    def __make_placement_base_z(self, permissible_size):
+        ac_size = Util.vector_add(self.__ac_size, self.ac_margin)
         #x = max(ac_size[0], max_inner_size[0])
         x = permissible_size[0] - ac_size[0]
         y = permissible_size[1] - ac_size[1]
@@ -398,6 +417,15 @@ class Module:
             'position': base_position
         }
 
+    def __make_placement_base_switch(self, permissible_size):
+        base = self.__make_placement_base_z(permissible_size)
+        base_z = 0
+        for inner in self.inners:
+            for position in inner.positions:
+                base_z = max(base_z, position[2] + inner.size[2])
+        base['position'][2] = base_z
+        return base
+
     def __max_inner_size(self):
         max_inner_size = [0, 0, 0]
         for inner in self.inners:
@@ -405,9 +433,9 @@ class Module:
                 max_inner_size[i] = max(max_inner_size[i], inner.size[i])
         return max_inner_size
 
-    def __set_inners_positions(self, rectangles, inner_ids):
+    def __set_inners_positions(self, rectangles, inner_ids, inner_getter):
         for rectangle, id in zip(rectangles, inner_ids):
-            self.get_inner(id).positions.append([
+            inner_getter(id).positions.append([
                 #rectangle['position'][i] + self.inner_margin[i]
                 rectangle['position'][i] + (self.inner_margin[i] if i == 1 else 0)
                 for i in range(3)
