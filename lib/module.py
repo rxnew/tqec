@@ -112,7 +112,7 @@ class Module:
 
     def to_output_format(self):
         return OrderedDict((
-            ('type'    , 'tqec'),
+            ('format'  , 'tqec'),
             ('id'      , self.id),
             ('type'    , self.type_name),
             ('size'    , self.size),
