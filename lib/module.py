@@ -19,7 +19,7 @@ from collections import OrderedDict, defaultdict
 class Module:
     dump_directory_path = '.'
     file_name_prefix    = 'module_'
-    inner_margin        = [2, 2, 2]
+    inner_margin        = [2, 2, 4]
     ac_margin           = [0, 2, 0]
     cnot_length         = 4
     pin_length          = 6
@@ -435,7 +435,7 @@ class Module:
     @Util.non_elementary()
     def __place_inners(self, permissible_size):
         max_inner_size = self.__max_inner_size()
-        max_inner_size = [max_inner_size[i] + self.inner_margin[i] * 2 for i in range(3)]
+        max_inner_size = [max_inner_size[i] + self.inner_margin[i] for i in range(3)]
         rectangles, inner_ids = self.__make_placement_rectangles(self.inners)
 
         # Y軸方向のストリップパッキング
@@ -501,7 +501,7 @@ class Module:
         inner_ids = []
 
         for inner in inners:
-            size =  [inner.size[i] + self.inner_margin[i] * 2 for i in range(3)]
+            size =  [inner.size[i] + self.inner_margin[i] for i in range(3)]
             rectangle = {'size': size}
             for i in range(inner.count + inner.spare_count):
                 rectangles.append(rectangle)
@@ -538,7 +538,7 @@ class Module:
         for inner in self.inners:
             for position in inner.positions:
                 base_z = max(base_z, position[2] + inner.size[2])
-        base['position'][2] = base_z + (self.inner_margin[2] << 1)
+        base['position'][2] = base_z + self.inner_margin[2]
         return base
 
     def __max_inner_size(self):
