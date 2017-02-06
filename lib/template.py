@@ -6,6 +6,7 @@ from util import Util
 import json
 import logging
 import sympy
+import re
 
 from collections import OrderedDict
 from functools import reduce
@@ -17,15 +18,21 @@ class Template:
     __deployed_counter = 0
 
     @classmethod
+    @Util.decode_dagger
+    def make_file_name(cls, type_name):
+        return cls.data_directory_path + type_name.lower() + '.json'
+
+    @classmethod
     @Util.encode_dagger
     @Util.cache()
     def get_instance(cls, type_name):
         return cls(type_name)
 
     @classmethod
-    @Util.decode_dagger
-    def load(cls, type_name):
-        file_name = cls.data_directory_path + type_name.lower() + '.json'
+    def load(cls, type_name, file_name=None):
+        if not file_name:
+            file_name = cls.make_file_name(type_name)
+
         try:
             fp = open(file_name, 'r')
         except IOError:
@@ -33,8 +40,12 @@ class Template:
             #cls.decompose()
             pass
         json_object = json.load(fp, object_pairs_hook=OrderedDict)
-        Converter.complement_icpm(json_object)
         fp.close()
+
+        if json_object.get('format', 'template').lower() == 'icm':
+            json_object = Converter.to_icpm(json_object)
+        Converter.complement_icpm(json_object)
+
         return json_object
 
     @classmethod
@@ -43,14 +54,15 @@ class Template:
         progress = '{0:3d}'.format(int(float(cls.__deployed_counter) / cls.__counter * 100))
         print(message % (progress, module_id))
 
-    def __init__(self, type_name):
-        json_object = self.load(type_name)
+    def __init__(self, type_name, file_name=None):
+        json_object = self.load(type_name, file_name)
         self.type_name       = type_name
         self.pure_error_rate = json_object.get('error', 0.0)
         self.size            = json_object.get('size')
         self.circuit         = json_object.get('circuit', {})
         self.geometry        = json_object.get('geometry')
         self.inners          = [] # (inner, count)
+        self.__flatten_operations()
         self.__set_inners(self.__collect_inners())
         Template.__counter += 1
 
@@ -71,6 +83,9 @@ class Template:
         Template.__deployed_counter += 1
         self.__print_deployment_status(module.id)
         return InnerModule(module)
+
+    def __flatten_operations(self):
+        self.circuit['operations'] = Util.flatten(self.circuit['operations'])
 
     def __collect_inners(self):
         initializations = self.circuit['initializations']

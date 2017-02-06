@@ -7,6 +7,7 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -85,7 +86,11 @@ class Module:
         try:
             stdout = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
         except subprocess.CalledProcessError as e:
+            err_file_name = cls.dump_directory_path + \
+                            '/subprocess' + '_' + command_key + '_failure_input.json'
+            shutil.copyfile(file_name, err_file_name)
             print('Subprocess output:', os.linesep, e.output, os.linesep, file=sys.stderr)
+            print('Subprocess input:', os.linesep, err_file_name, os.linesep, file=sys.stderr)
             raise
         return stdout.decode('utf-8')
 
@@ -523,7 +528,8 @@ class Module:
     def __make_placement_base_z(self, permissible_size):
         ac_size = Util.vector_add(self.__ac_size, self.ac_margin)
         #x = max(ac_size[0], max_inner_size[0])
-        x = permissible_size[0] - ac_size[0]
+        #x = permissible_size[0] - ac_size[0]
+        x = permissible_size[0]
         y = permissible_size[1] - ac_size[1]
         base_size = [x, y, 0]
         base_position = [0, ac_size[1], 0]

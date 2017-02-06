@@ -41,6 +41,20 @@ class Util:
         return xi
 
     @staticmethod
+    def flatten(l):
+        i = 0
+        while i < len(l):
+            while isinstance(l[i], list):
+                if not l[i]:
+                    l.pop(i)
+                    i -= 1
+                    break
+                else:
+                    l[i:i + 1] = l[i]
+            i += 1
+        return l
+
+    @staticmethod
     def cache(encoder=lambda arg: arg, decoder=lambda arg: arg,
               keygen=lambda *args: args, cached_hook=None):
         def decorator(f):

@@ -2,13 +2,14 @@
 
 __doc__ = """
 Usage:
-    {f} [-t | --type <type>] [-e | --error <error>] [-s | --size <size>]
+    {f} [[-t | --type <type>] | [-f | --file <file>]] [-e | --error <error>] [-s | --size <size>]
     {f} convert <format> <file>
     {f} -h | --help
 
 Options:
     -t --type=<type>   template type name        [default: cv]
-    -e --error=<error> permissible error rate    [default: 0.001]
+    -f --file=<file>   template file name
+    -e --error=<error> permissible error rate    [default: 0.002]
     -s --size=<size>   permissible size          [default: 30,49]
     <format>           output file format
     <file>             input file
@@ -30,13 +31,13 @@ from converter import Converter
 script_dir = os.path.dirname(__file__)
 result_dir = script_dir + '/results'
 
-def main(type_name, permissible_error_rate, permissible_size):
+def main(type_name, file_name, permissible_error_rate, permissible_size):
     if not os.path.isdir(result_dir): os.makedirs(result_dir)
 
     Template.data_directory_path = script_dir + '/' + Template.data_directory_path
     Module.dump_directory_path = result_dir + '/' + type_name.lower()
 
-    template = Template(type_name)
+    template = Template(type_name, file_name)
     module_id = template.deploy(permissible_error_rate, permissible_size).id
     Module.make_complete_file(module_id)
 
@@ -53,10 +54,15 @@ def parse():
     return main, parse_main(args)
 
 def parse_main(args):
-    type_name = args['--type'][0]
+    if len(args['--file']) != 0:
+        type_name = 'main'
+        file_name = args['--file'][0]
+    else:
+        type_name = args['--type'][0]
+        file_name = None
     permissible_error_rate = float(args['--error'][0])
     permissible_size = tuple([int(s) for s in args['--size'][0].split(',')])
-    return type_name, permissible_error_rate, permissible_size
+    return type_name, file_name, permissible_error_rate, permissible_size
 
 def parse_convert(args):
     format_name = args['<format>']
