@@ -8,7 +8,7 @@ Usage:
 
 Options:
     -t --type=<type>   template type name        [default: cv]
-    -e --error=<error> permissible error rate    [default: 0.0001]
+    -e --error=<error> permissible error rate    [default: 0.001]
     -s --size=<size>   permissible size          [default: 30,49]
     <format>           output file format
     <file>             input file

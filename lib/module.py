@@ -48,12 +48,12 @@ class Module:
     def load(cls, id):
         file_name = cls.make_file_name(id)
         with open(file_name, 'r') as fp:
-            json_object = json.load(fp)
+            json_object = json.load(fp, object_pairs_hook=OrderedDict)
         return json_object
 
     @classmethod
     def make_complete_file(cls, id, indent=4):
-        json_object = {}
+        json_object = OrderedDict()
         json_object['main'] = cls.load(id)
 
         def add_subs(sub_id):
