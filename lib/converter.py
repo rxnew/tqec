@@ -9,6 +9,11 @@ class Converter:
                 ('format' , 'icpm'),
                 ('circuit', cls.qc_to_icpm(json_object['circuit']))
             ))
+        if json_object['format'] == 'icm':
+            return OrderedDict((
+                ('format' , 'icpm'),
+                ('circuit', cls.icm_to_icpm(json_object['circuit']))
+            ))
 
     @classmethod
     def to_qc(cls, json_object):
@@ -38,6 +43,10 @@ class Converter:
     @classmethod
     def icpm_to_qc(cls, icpm_circuit):
         return IcpmToQcConverter.convert(icpm_circuit)
+
+    @classmethod
+    def icm_to_icpm(cls, icm_circuit):
+        return IcmToIcpmConverter.convert(icm_circuit)
 
     @classmethod
     def icm_to_tqec(cls, icm_circuit):
@@ -212,9 +221,76 @@ class IcpmToQcConverter:
             operation_type = icpm_operation['module']
 
         return OrderedDict((
-            ('type', operation_type),
+            ('type'    , operation_type),
             ('controls', icpm_operation.get('controls', [])),
             ('targets' , icpm_operation.get('targets', []))
+        ))
+
+class IcmToIcpmConverter:
+    @classmethod
+    def convert(cls, icm_circuit):
+        icm_initializations  = icm_circuit.get('initializations', [])
+        icm_measurements     = icm_circuit.get('measurements', [])
+        icm_cnots            = icm_circuit.get('cnots', [])
+        icpm_initializations = cls.__convert_initializations(icm_initializations)
+        icpm_measurements    = cls.__convert_measurements(icm_measurements)
+        icpm_operations      = cls.__convert_cnots(icm_cnots)
+
+        return OrderedDict((
+            ('bits'           , icm_circuit.get('bits', [])),
+            ('inputs'         , icm_circuit.get('inputs', [])),
+            ('outputs'        , icm_circuit.get('outputs', [])),
+            ('initializations', icpm_initializations),
+            ('measurements'   , icpm_measurements),
+            ('operations'     , icpm_operations)
+        ))
+
+    @classmethod
+    def __convert_initializations(cls, icm_initializations):
+        return [cls.__convert_initialization(icm_initialization)
+                for icm_initialization in icm_initializations]
+
+    @classmethod
+    def __convert_measurements(cls, icm_measurements):
+        return [cls.__convert_measurement(icm_measurement)
+                for icm_measurement in icm_measurements]
+
+    @classmethod
+    def __convert_cnots(cls, icm_cnots):
+        return [cls.__convert_cnot(icm_cnot)
+                for icm_cnot in icm_cnots]
+
+    @classmethod
+    def __convert_initialization(cls, icm_initialization):
+        initialization_type = icm_initialization['type'].lower()
+
+        if initialization_type == 'y' or initialization_type == 'a':
+            initialization_module = initialization_type
+            initialization_type = 'pin'
+            return OrderedDict((
+                ('bit'   , icm_initialization['bit']),
+                ('type'  , initialization_type),
+                ('module', initialization_module)
+            ))
+
+        return OrderedDict((
+            ('bit' , icm_initialization['bit']),
+            ('type', initialization_type)
+        ))
+
+    @classmethod
+    def __convert_measurement(cls, icm_measurement):
+        return OrderedDict((
+            ('bit' , icm_measurement['bit']),
+            ('type', icm_measurement['type'])
+        ))
+
+    @classmethod
+    def __convert_cnot(cls, icm_cnot):
+        return OrderedDict((
+            ('type'    , 'cnot'),
+            ('controls', icm_cnot.get('controls', [])),
+            ('targets' , icm_cnot.get('targets', []))
         ))
 
 class IcmToTqecConverter:
