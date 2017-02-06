@@ -45,6 +45,41 @@ class Module:
         return cls.dump_directory_path + '/' + cls.file_name_prefix + id + '.json'
 
     @classmethod
+    def load(cls, id):
+        file_name = cls.make_file_name(id)
+        with open(file_name, 'r') as fp:
+            json_object = json.load(fp)
+        return json_object
+
+    @classmethod
+    def make_complete_file(cls, id, indent=4):
+        json_object = {}
+        json_object['main'] = cls.load(id)
+
+        def add_subs(sub_id):
+            if sub_id == id         : return
+            if sub_id in json_object: return
+            if cls.is_switch(sub_id): return
+            sub_json_object = cls.load(sub_id)
+            json_object[sub_id] = sub_json_object
+            for inner in sub_json_object.get('modules', []):
+                add_subs(inner['id'])
+
+        for inner in json_object['main']['geometry'].get('modules', []):
+            add_subs(inner['id'])
+
+        file_name = cls.make_file_name(id + '_complete')
+        with open(file_name, 'w') as fp:
+            json.dump(json_object, fp, indent=indent)
+            fp.flush()
+
+    @classmethod
+    def is_switch(cls, id):
+        pattern = r'^sw_.+$'
+        repatter = re.compile(pattern)
+        return repatter.match(id) != None
+
+    @classmethod
     def __exec_subproccess(cls, command_key, file_name):
         command = cls.__commands[command_key] % (file_name)
         try:

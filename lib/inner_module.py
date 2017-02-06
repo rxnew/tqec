@@ -7,12 +7,7 @@ class InnerModule:
     @classmethod
     def load(cls, id):
         from module import Module
-
-        file_name = Module.make_file_name(id)
-
-        with open(file_name, 'r') as fp:
-            json_object = json.load(fp)
-
+        json_object = Module.load(id)
         return InnerModule(
             type('InnerModuleType', (), {
                 'id'        : json_object['id'],

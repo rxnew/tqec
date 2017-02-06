@@ -37,7 +37,8 @@ def main(type_name, permissible_error_rate, permissible_size):
     Module.dump_directory_path = result_dir + '/' + type_name.lower()
 
     template = Template(type_name)
-    template.deploy(permissible_error_rate, permissible_size)
+    module_id = template.deploy(permissible_error_rate, permissible_size).id
+    Module.make_complete_file(module_id)
 
 def convert(format_name, file_name):
     with open(file_name, 'r') as fp:
