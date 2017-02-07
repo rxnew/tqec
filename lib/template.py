@@ -42,7 +42,7 @@ class Template:
         json_object = json.load(fp, object_pairs_hook=OrderedDict)
         fp.close()
 
-        if json_object.get('format', 'template').lower() == 'icm':
+        if json_object.get('format', 'template').lower() != 'tqec':
             json_object = Converter.to_icpm(json_object)
         Converter.complement_icpm(json_object)
 
