@@ -55,11 +55,11 @@ def parse():
 
 def parse_main(args):
     if len(args['--file']) != 0:
-        type_name = 'main'
         file_name = args['--file'][0]
+        type_name = 'main_' + os.path.splitext(os.path.basename(file_name))[0]
     else:
-        type_name = args['--type'][0]
         file_name = None
+        type_name = args['--type'][0]
     permissible_error_rate = float(args['--error'][0])
     permissible_size = tuple([int(s) for s in args['--size'][0].split(',')])
     return type_name, file_name, permissible_error_rate, permissible_size
