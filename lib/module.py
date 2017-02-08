@@ -92,7 +92,16 @@ class Module:
             print('Subprocess output:', os.linesep, e.output, os.linesep, file=sys.stderr)
             print('Subprocess input:', os.linesep, err_file_name, os.linesep, file=sys.stderr)
             raise
-        return stdout.decode('utf-8')
+        try:
+            result = stdout.decode('utf-8')
+        except UnicodeDecodeError:
+            err_file_name = cls.dump_directory_path + \
+                            '/subprocess' + '_' + command_key + '_invalid_output.json'
+            with open(err_file_name, 'w') as fp:
+                fp.write(stdout)
+            print('Subprocess output:', os.linesep, err_file_name, os.linesep, file=sys.stderr)
+            raise
+        return result
 
     def __init__(self, template, inners, *constraints):
         self.id         = self.make_id(template.type_name)

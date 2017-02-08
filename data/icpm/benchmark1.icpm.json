@@ -1,0 +1,32 @@
+{
+    "format": "icpm",
+    "circuit": {
+        "bits"   : [0, 1, 2],
+        "inputs" : [0, 1, 2],
+        "outputs": [0, 1, 2],
+        "initializations": [
+        ],
+        "measurements": [
+        ],
+        "operations": [
+            {
+                "type"    : "pin",
+                "module"  : "toffoli.icm",
+                "controls": [0, 1],
+                "targets" : [2]
+            },
+            {
+                "type"    : "pin",
+                "module"  : "toffoli.icm",
+                "controls": [0, 1],
+                "targets" : [2]
+            },
+            {
+                "type"    : "pin",
+                "module"  : "toffoli.icm",
+                "controls": [0, 1],
+                "targets" : [2]
+            }
+        ]
+    }
+}

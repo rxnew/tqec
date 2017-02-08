@@ -1,0 +1,94 @@
+{
+    "format": "icpm",
+    "circuit": {
+        "bits"   : [0, 1, 2],
+        "inputs" : [0, 1, 2],
+        "outputs": [0, 1, 2],
+        "initializations": [
+        ],
+        "measurements": [
+        ],
+        "operations": [
+            {
+                "type"    : "pin",
+                "module"  : "h",
+                "targets" : [2]
+            },
+            {
+                "type"    : "cnot",
+                "controls": [1],
+                "targets" : [2]
+            },
+            {
+                "type"    : "pin",
+                "module"  : "t*",
+                "targets" : [2]
+            },
+            {
+                "type"    : "cnot",
+                "controls": [0],
+                "targets" : [2]
+            },
+            {
+                "type"    : "pin",
+                "module"  : "t",
+                "targets" : [2]
+            },
+            {
+                "type"    : "cnot",
+                "controls": [1],
+                "targets" : [2]
+            },
+            {
+                "type"    : "pin",
+                "module"  : "t*",
+                "targets" : [2]
+            },
+            {
+                "type"    : "cnot",
+                "controls": [0],
+                "targets" : [2]
+            },
+            {
+                "type"    : "pin",
+                "module"  : "t*",
+                "targets" : [1]
+            },
+            {
+                "type"    : "pin",
+                "module"  : "t",
+                "targets" : [2]
+            },
+            {
+                "type"    : "cnot",
+                "controls": [0],
+                "targets" : [1]
+            },
+            {
+                "type"    : "pin",
+                "module"  : "t*",
+                "targets" : [1]
+            },
+            {
+                "type"    : "cnot",
+                "controls": [0],
+                "targets" : [1]
+            },
+            {
+                "type"    : "pin",
+                "module"  : "t",
+                "targets" : [0]
+            },
+            {
+                "type"    : "pin",
+                "module"  : "s",
+                "targets" : [1]
+            },
+            {
+                "type"    : "pin",
+                "module"  : "h",
+                "targets" : [2]
+            }
+        ]
+    }
+}

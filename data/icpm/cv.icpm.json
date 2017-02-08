@@ -1,0 +1,49 @@
+{
+    "format": "icpm",
+    "circuit": {
+        "bits"   : [0, 1],
+        "inputs" : [0, 1],
+        "outputs": [0, 1],
+        "initializations": [
+        ],
+        "measurements": [
+        ],
+        "operations": [
+            {
+                "type"    : "pin",
+                "module"  : "t*",
+                "targets" : [0]
+            },
+            {
+                "type"    : "pin",
+                "module"  : "h",
+                "targets" : [1]
+            },
+            {
+                "type"    : "cnot",
+                "controls": [1],
+                "targets" : [0]
+            },
+            {
+                "type"    : "pin",
+                "module"  : "t",
+                "targets" : [0]
+            },
+            {
+                "type"    : "pin",
+                "module"  : "t*",
+                "targets" : [1]
+            },
+            {
+                "type"    : "cnot",
+                "controls": [1],
+                "targets" : [0]
+            },
+            {
+                "type"    : "pin",
+                "module"  : "h",
+                "targets" : [1]
+            }
+        ]
+    }
+}

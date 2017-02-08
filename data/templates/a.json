@@ -1,5 +1,5 @@
 {
-    "type"  : "tqec",
+    "format": "tqec",
     "error" : 0.2,
     "size"  : [32, 4, 12],
     "circuit": {

@@ -1,0 +1,56 @@
+{
+    "format": "icpm",
+    "circuit": {
+        "bits"   : [0, 1, 2, 3],
+        "inputs" : [1],
+        "outputs": [1],
+        "initializations": [
+            {
+                "bit"   : 0,
+                "type"  : "pin",
+                "module": "y"
+            },
+            {
+                "bit"   : 2,
+                "type"  : "pin",
+                "module": "y"
+            },
+            {
+                "bit"   : 3,
+                "type"  : "pin",
+                "module": "y"
+            }
+        ],
+        "measurements": [
+            {
+                "bit" : 0,
+                "type": "x"
+            },
+            {
+                "bit" : 2,
+                "type": "x"
+            },
+            {
+                "bit" : 3,
+                "type": "x"
+            }
+        ],
+        "operations": [
+            {
+                "type": "cnot",
+                "controls": [0],
+                "targets" : [1]
+            },
+            {
+                "type": "cnot",
+                "controls": [2],
+                "targets" : [1]
+            },
+            {
+                "type": "cnot",
+                "controls": [3],
+                "targets" : [1]
+            }
+        ]
+    }
+}

@@ -100,7 +100,7 @@ auto Connection::search() -> Routes {
               << std::endl;
   */
 
-  return std::move(result_routes);
+  return result_routes;
 }
 }
 }
