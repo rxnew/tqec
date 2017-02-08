@@ -59,6 +59,7 @@ auto Connection::search() -> Routes {
   auto result_cost = std::numeric_limits<int>::max();
   auto result_intersection_count = std::numeric_limits<int>::max();
   auto count = 0;
+  //auto non_update_count = 0;
   auto bias = 0.0f;
 
   while(true) {
@@ -83,12 +84,15 @@ auto Connection::search() -> Routes {
         result_cost = cost;
         result_intersection_count = intersection_count;
         result_routes = routes;
+        //non_update_count = 0;
       }
     }
 
     if(result_intersection_count == 0) break;
-    // とりあえず1000回試行
+    // とりあえず100回試行
     if(count++ > 100) break;
+    // とりあえず20回経路の更新が行われなかったら終了
+    //if(count > 50 && non_update_count++ > 10) break;
 
     if(bias < 1.0f) bias += 0.01f;
     this->_updateWeights(routes);

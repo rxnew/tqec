@@ -63,7 +63,7 @@ class Module:
             if cls.is_switch(sub_id): return
             sub_json_object = cls.load(sub_id)
             json_object[sub_id] = sub_json_object
-            for inner in sub_json_object.get('modules', []):
+            for inner in sub_json_object['geometry'].get('modules', []):
                 add_subs(inner['id'])
 
         for inner in json_object['main']['geometry'].get('modules', []):
