@@ -3,6 +3,21 @@ from collections import OrderedDict
 
 class Converter:
     @classmethod
+    def to_qc(cls, json_object):
+        if json_object['format'] == 'qc':
+            return json_object
+        if json_object['format'] == 'icm':
+            return OrderedDict((
+                ('format' , 'qc'),
+                ('circuit', cls.icm_to_qc(json_object['circuit']))
+            ))
+        if json_object['format'] == 'icpm':
+            return OrderedDict((
+                ('format' , 'qc'),
+                ('circuit', cls.icpm_to_qc(json_object['circuit']))
+            ))
+
+    @classmethod
     def to_icpm(cls, json_object):
         if json_object['format'] == 'icpm':
             return json_object
@@ -18,19 +33,14 @@ class Converter:
             ))
 
     @classmethod
-    def to_qc(cls, json_object):
-        if json_object['format'] == 'qc':
-            return json_object
-        if json_object['format'] == 'icpm':
-            return OrderedDict((
-                ('format' , 'qc'),
-                ('circuit', cls.icpm_to_qc(json_object['circuit']))
-            ))
-
-    @classmethod
     def to_tqec(cls, json_object):
         if json_object['format'] == 'tqec':
             return json_object
+        if json_object['format'] == 'qc':
+            return OrderedDict((
+                ('format' , 'tqec'),
+                ('circuit', cls.qc_to_tqec(json_object['circuit']))
+            ))
         if json_object['format'] == 'icm':
             return OrderedDict((
                 ('format' , 'tqec'),
@@ -47,7 +57,13 @@ class Converter:
         return QcToIcpmConverter.convert(qc_circuit)
 
     @classmethod
-    def icpm_to_qc(cls, icpm_circuit):
+    def qc_to_tqec(cls, qc_circuit):
+        icpm_circuit = QcToIcpmConverter.convert(qc_circuit)
+        return IcpmToTqecConverter.convert(icpm_circuit)
+
+    @classmethod
+    def icm_to_qc(cls, icm_circuit):
+        icpm_circuit = IcmToIcpmConverter.convert(icm_circuit)
         return IcpmToQcConverter.convert(icpm_circuit)
 
     @classmethod
@@ -57,6 +73,10 @@ class Converter:
     @classmethod
     def icm_to_tqec(cls, icm_circuit):
         return IcmToTqecConverter.convert(icm_circuit)
+
+    @classmethod
+    def icpm_to_qc(cls, icpm_circuit):
+        return IcpmToQcConverter.convert(icpm_circuit)
 
     @classmethod
     def icpm_to_tqec(cls, icpm_circuit):
