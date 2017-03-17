@@ -104,13 +104,15 @@ class Module:
         return result
 
     def __init__(self, template, inners, *constraints):
-        self.id         = self.make_id(template.type_name)
-        self.type_name  = template.type_name
-        self.circuit    = template.circuit
-        self.geometry   = template.geometry
-        self.error_rate = template.pure_error_rate
-        self.size       = template.size # 後に更新 (elementary module用)
-        self.inners     = inners
+        self.id          = self.make_id(template.type_name)
+        self.type_name   = template.type_name
+        self.circuit     = template.circuit
+        self.geometry    = template.geometry
+        self.error_rate  = template.pure_error_rate
+        self.size        = template.size # 後に更新 (elementary module用)
+        self.inners      = inners
+        self.switches    = []
+        self.connections = []
 
         if self.is_regular(): self.__init_regular(*constraints)
         else                : self.__init_non_regular()
@@ -229,10 +231,10 @@ class Module:
         }
 
     def __find_connection_min_max_position(self):
-        if len(self.__connections) == 0: return 0, 0
+        if len(self.connections) == 0: return [0, 0, 0], [0, 0, 0]
         min_position = [sys.maxsize for i in range(3)]
         max_position = [0 for i in range(3)]
-        for connection in self.__connections:
+        for connection in self.connections:
             for position in connection:
                 min_position = list(map(min, min_position, position))
                 max_position = list(map(max, max_position, position))
@@ -270,7 +272,7 @@ class Module:
     def __make_geometry_connections(self):
         logical_qubits = []
         id_count = self.__find_logical_qubits_max_id(self.geometry['logical_qubits'])
-        for connection in self.__connections:
+        for connection in self.connections:
             # 接続に失敗した経路を無視 (暫定)
             if len(connection) == 0: continue
             id_count += 1
@@ -586,7 +588,7 @@ class Module:
             fp.flush()
             result = self.__exec_subproccess('connection', fp.name)
 
-        self.__connections = self.__scale_up(json.loads(result)['connections'])
+        self.connections = self.__scale_up(json.loads(result)['connections'])
 
     def __make_connection_region(self, permissible_size):
         # TODO: 許容サイズを考慮する
