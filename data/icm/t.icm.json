@@ -1,0 +1,78 @@
+{
+    "format": "icm",
+    "circuit": {
+        "bits"   : [0, 1, 2, 3, 4, 5],
+        "inputs" : [0],
+        "outputs": [5],
+        "initializations": [
+            {
+                "bit"   : 1,
+                "type"  : "a"
+            },
+            {
+                "bit"   : 2,
+                "type"  : "z"
+            },
+            {
+                "bit"   : 3,
+                "type"  : "y"
+            },
+            {
+                "bit"   : 4,
+                "type"  : "x"
+            },
+            {
+                "bit"   : 5,
+                "type"  : "z"
+            }
+        ],
+        "measurements": [
+            {
+                "bit" : 0,
+                "type": "z"
+            },
+            {
+                "bit" : 1,
+                "type": "z/x"
+            },
+            {
+                "bit" : 2,
+                "type": "x/z"
+            },
+            {
+                "bit" : 3,
+                "type": "x/z"
+            },
+            {
+                "bit" : 4,
+                "type": "z/x"
+            }
+        ],
+        "cnots": [
+            {
+                "controls": [1],
+                "targets" : [0]
+            },
+            {
+                "controls": [1],
+                "targets" : [2]
+            },
+            {
+                "controls": [3],
+                "targets" : [1]
+            },
+            {
+                "controls": [4],
+                "targets" : [3]
+            },
+            {
+                "controls": [3],
+                "targets" : [5]
+            },
+            {
+                "controls": [4],
+                "targets" : [5]
+            }
+        ]
+    }
+}

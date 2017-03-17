@@ -44,9 +44,16 @@ def main(type_name, file_name, permissible_error_rate, permissible_size):
 def convert(format_name, file_name):
     with open(file_name, 'r') as fp:
         json_object = json.load(fp)
-    if format_name == 'tqec':
-        tqec_json_object = Converter.to_tqec(json_object)
-        print(json.dumps(tqec_json_object, indent=4))
+    if format_name == 'qc':
+        converted_json_object = Converter.to_qc(json_object)
+    elif format_name == 'icpm':
+        converted_json_object = Converter.to_icpm(json_object)
+    elif format_name == 'tqec':
+        converted_json_object = Converter.to_tqec(json_object)
+    else:
+        print('Unknown format \'' + format_name + '\'', file=sys.stderr)
+        return
+    print(json.dumps(converted_json_object, indent=4))
 
 def parse():
     args = docopt(__doc__)
